@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Claude 5.5 Keynote Frames</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  :root {
+    --paper: #f5f5f2;
+    --ink: #0e0e10;
+    --grey: #8b8b87;
+    --grey2: #a3a39e;
+    --bar1: #d4d4cf;
+    --bar2: #e2e2dd;
+    --opus: #ff5a1f;
+    --sonnet: #2f5bff;
+    --haiku: #cdf24f;
+    --sans: "Geist", "Noto Sans SC", sans-serif;
+    --mono: "Geist Mono", "Noto Sans SC", monospace;
+  }
+  html, body { margin: 0; background: #ddd; }
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background: var(--paper); color: var(--ink); font-family: var(--sans);
+    -webkit-font-smoothing: antialiased; font-feature-settings: "tnum" 1;
+  }
+  #stage * { box-sizing: border-box; }
+  .scene { position: absolute; inset: 0; }
+  .dot { position: absolute; border-radius: 50%; }
+
+  /* Masked lines: text rises out of (or sinks into) the line's bottom edge. */
+  .m { display: block; overflow: hidden; padding-bottom: .1em; margin-bottom: -.1em; }
+  .m > span { display: block; will-change: transform; }
+
+  .label { position: absolute; left: 160px; top: 136px; display: flex; align-items: center; gap: 16px;
+           font: 600 30px/1 var(--sans); letter-spacing: -.01em; }
+  .label i { width: 22px; height: 22px; border-radius: 50%; display: block; }
+  .label span { color: var(--grey); font-weight: 500; }
+
+  .hl { position: absolute; left: 160px; font: 700 112px/1.1 var(--sans); letter-spacing: -.03em; white-space: nowrap; }
+  .hl .g { color: var(--grey2); }
+  .en { position: absolute; left: 160px; font: 500 30px/1.45 var(--sans); color: var(--grey); letter-spacing: -.005em; }
+  .foot { position: absolute; left: 160px; bottom: 72px; font: 500 20px/1 var(--mono); color: var(--grey2); letter-spacing: 0; }
+
+  .bars .row { position: absolute; left: 160px; height: 64px; display: flex; align-items: center; }
+  .bars .name { width: 280px; font: 600 32px/1 var(--sans); letter-spacing: -.015em; }
+  .bars .bar { height: 64px; border-radius: 14px; transform-origin: left center; }
+  .bars .val { margin-left: 28px; font: 700 44px/1 var(--sans); letter-spacing: -.03em; }
+  .bars .dim .name, .bars .dim .val { color: var(--grey); }
+  .bars .dim .val { font-size: 36px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+const W = 1920, H = 1080;
+const stage = document.getElementById("stage");
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim();
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (p, a, b) => clamp((p - a) / (b - a));
+const io3 = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const in3 = (t) => t * t * t;
+const out3 = (t) => 1 - Math.pow(1 - t, 3);
+const outExpo = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+const inBack = (t) => 2.7 * t * t * t - 1.7 * t * t;
+// Closed-form spring (about 12% overshoot), so any frame can be drawn directly.
+const spring = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.exp(-6.5 * t) * Math.cos(9.5 * t));
+const lerp = (a, b, t) => a + (b - a) * t;
+const mix = (c1, c2, t) => {
+  const h = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const a = h(c1), b = h(c2);
+  return "rgb(" + a.map((v, i) => Math.round(lerp(v, b[i], t))).join(",") + ")";
+};
+
+const el = (html) => { const d = document.createElement("div"); d.className = "scene"; d.innerHTML = html; stage.appendChild(d); return d; };
+// A masked headline line. `y` is the rise offset in % of the line height (0 = in place, 105 = hidden below).
+const line = (text, cls = "", y = 0) => `<span class="m ${cls}"><span style="transform:translateY(${y}%)">${text}</span></span>`;
+const label = (color, name, date) => `<div class="label"><i style="background:${color}"></i>${name}<span>${date}</span></div>`;
+const dot = (cx, cy, d, color, extra = "") =>
+  `<i class="dot" style="left:${cx - d / 2}px;top:${cy - d / 2}px;width:${d}px;height:${d}px;background:${color};${extra}"></i>`;
+const ring = (cx, cy, d, color, w) =>
+  `<i class="dot" style="left:${cx - d / 2}px;top:${cy - d / 2}px;width:${d}px;height:${d}px;box-shadow:inset 0 0 0 ${w}px ${color}"></i>`;
+
+// "Claude 5.5" laid out once on a hidden line; each piece is then placed absolutely so it can rise on its own mask.
+function measureTitle(size, cy) {
+  const m = el(`<div style="position:absolute;visibility:hidden;white-space:nowrap;font:700 ${size}px/1 var(--sans);letter-spacing:-.05em">` +
+    `<span id="m1">Claude 5</span><span id="ms" style="display:inline-block;width:.21em"></span><span id="m2">5</span>` +
+    `<span id="mb" style="display:inline-block;width:0;height:0"></span></div>`);
+  const box = m.firstChild;
+  const w = box.getBoundingClientRect().width;
+  box.style.left = (W - w) / 2 + "px";
+  box.style.top = cy - size / 2 + "px";
+  const r = (id) => m.querySelector("#" + id).getBoundingClientRect();
+  const s = stage.getBoundingClientRect();
+  const out = { size, a: r("m1"), slot: r("ms"), b: r("m2"), base: r("mb").bottom - s.top };
+  for (const k of ["a", "slot", "b"]) out[k] = { x: out[k].left - s.left, y: out[k].top - s.top, w: out[k].width, h: out[k].height };
+  m.remove();
+  out.d = Math.round(size * 0.155);
+  out.cx = out.slot.x + out.slot.w / 2;
+  out.cy = out.base - out.d / 2;
+  return out;
+}
+const titlePiece = (r, text, y, size) =>
+  // line-height = the measured content-area height, so the glyphs sit exactly where they did on the measuring line.
+  `<div style="position:absolute;overflow:hidden;left:${r.x}px;top:${r.y}px;height:${r.h}px;font:700 ${size}px/${r.h}px var(--sans);letter-spacing:-.05em;white-space:nowrap">` +
+  `<span style="display:block;transform:translateY(${y}%)">${text}</span></div>`;
+
+/* ---------------------------------------------------------------- scenes */
+
+// Hook dots: big / medium / small, centred as one row.
+const HOOK = (() => {
+  const ds = [132, 92, 56], gap = 44, cy = 452;
+  let x = W / 2 - (ds.reduce((a, b) => a + b) + gap * 2) / 2;
+  return ds.map((d) => { const c = { cx: x + d / 2, cy, d }; x += d + gap; return c; });
+})();
+
+function hook(p = 1, sink = 0) {
+  // p: entrance of the dots (spring pops on beats 1, 2, 3); sink: hook text going back into its mask.
+  let h = "";
+  HOOK.forEach((c, i) => {
+    const s = spring(seg(p, i * 0.18, i * 0.18 + 0.55));
+    h += dot(c.cx, c.cy, c.d * s, css("ink"));
+  });
+  const y = lerp(105, 0, outExpo(seg(p, 0.55, 1))) + 105 * in3(sink);
+  h += `<div style="position:absolute;left:0;right:0;top:590px;text-align:center;font:700 84px/1.1 var(--sans);letter-spacing:-.01em">${line("一个家族，三种尺寸", "", y)}</div>`;
+  h += `<div style="position:absolute;left:0;right:0;top:710px;text-align:center;font:500 32px/1.3 var(--sans);color:var(--grey)">${line("One family, three sizes", "", y)}</div>`;
+  return el(h);
+}
+
+function title(p = 1, dotColor = css("opus")) {
+  const T = measureTitle(272, 500);
+  let h = titlePiece(T.a, "Claude 5", lerp(105, 0, outExpo(seg(p, 0, 0.6))), T.size);
+  h += titlePiece(T.b, "5", lerp(105, 0, outExpo(seg(p, 0.25, 0.8))), T.size);
+  h += dot(T.cx, T.cy, T.d, dotColor);
+  const y = lerp(105, 0, outExpo(seg(p, 0.5, 1)));
+  h += `<div style="position:absolute;left:0;right:0;top:720px;text-align:center;font:500 34px/1.3 var(--sans);color:var(--grey);letter-spacing:-.005em">` +
+    line(`Opus 5.5 <span style="color:var(--bar1)">&nbsp;·&nbsp;</span> Sonnet 5.5 <span style="color:var(--bar1)">&nbsp;·&nbsp;</span> Haiku 5.5`, "", y) + `</div>`;
+  return { node: el(h), T };
+}
+
+function opus(p = 1) {
+  const y1 = lerp(105, 0, outExpo(seg(p, 0, 0.55))), y2 = lerp(105, 0, outExpo(seg(p, 0.15, 0.7))), y3 = lerp(105, 0, outExpo(seg(p, 0.35, 0.9)));
+  return el(
+    label(css("opus"), "Opus 5.5", "2026.09.22") +
+    `<div class="hl" style="top:330px">${line("Fable 5.1 级的表现", "", y1)}${line("运行成本低 40%", "g", y2)}</div>` +
+    `<div class="en" style="top:640px">${line("Fable 5.1-level performance on most work,", "", y3)}${line("at 40% lower running cost than Opus 5", "", y3)}</div>` +
+    `<div class="foot">对比 Opus 5 · 来源 anthropic.com/claude-opus-5-5</div>`);
+}
+
+function chart() {
+  const rows = [["Opus 5.5", 66.4, css("opus"), ""], ["Fable 5.1", 55.8, css("bar1"), "dim"], ["Opus 5", 52.3, css("bar2"), "dim"]];
+  let h = label(css("opus"), "Opus 5.5", "2026.09.22");
+  h += `<div style="position:absolute;left:160px;top:286px;font:700 64px/1 var(--sans);letter-spacing:-.03em">Terminal-Bench 4.0</div>`;
+  h += `<div style="position:absolute;left:160px;top:372px;font:500 30px/1 var(--sans);color:var(--grey)">智能体编程 · Agentic coding</div>`;
+  h += `<div class="bars">`;
+  rows.forEach(([n, v, c, cls], i) => {
+    h += `<div class="row ${cls}" style="top:${500 + i * 120}px"><div class="name">${n}</div>` +
+      `<div class="bar" style="width:${v * 15}px;background:${c}"></div><div class="val">${v.toFixed(1)}%</div></div>`;
+  });
+  h += `</div><div class="foot">max effort · 来源 anthropic.com/claude-opus-5-5</div>`;
+  return el(h);
+}
+
+function price() {
+  return el(
+    label(css("opus"), "Opus 5.5", "2026.09.22") +
+    `<div style="position:absolute;left:0;right:0;top:300px;text-align:center"><span style="position:relative;display:inline-block;font:600 72px/1 var(--sans);color:var(--grey2);letter-spacing:-.03em">$5 / $25` +
+    `<i style="position:absolute;left:-12px;right:-12px;top:50%;height:6px;margin-top:-3px;border-radius:3px;background:var(--opus)"></i></span></div>` +
+    `<div style="position:absolute;left:0;right:0;top:410px;text-align:center;font:700 248px/1 var(--sans);letter-spacing:-.055em">$4 / $20</div>` +
+    `<div style="position:absolute;left:0;right:0;top:712px;text-align:center;font:500 34px/1.3 var(--sans);color:var(--grey)">每百万 tokens · 输入 / 输出</div>` +
+    `<div style="position:absolute;left:0;right:0;top:762px;text-align:center;font:500 26px/1.3 var(--sans);color:var(--grey2)">per million tokens, input / output</div>` +
+    `<div class="foot">对比 Opus 5 · 来源 anthropic.com/claude-opus-5-5</div>`);
+}
+
+function sonnet() {
+  const rows = [["Sonnet 5.5", 70.6, css("sonnet"), ""], ["Opus 5.5", 66.4, css("bar1"), "dim"]];
+  let h = label(css("sonnet"), "Sonnet 5.5", "2026.09.28");
+  h += `<div class="hl" style="top:250px;font-size:104px">${line("编程跑分超过 Opus 5.5")}${line("价格只要一半", "g")}</div>`;
+  h += `<div style="position:absolute;left:160px;top:560px;font:500 28px/1 var(--sans);color:var(--grey)">Terminal-Bench 4.0</div><div class="bars">`;
+  rows.forEach(([n, v, c, cls], i) => {
+    h += `<div class="row ${cls}" style="top:${620 + i * 110}px"><div class="name">${n}</div>` +
+      `<div class="bar" style="width:${v * 14}px;background:${c}"></div><div class="val">${v.toFixed(1)}%</div></div>`;
+  });
+  h += `</div><div class="foot">$2 / $10 vs $4 / $20 每百万 tokens · 来源 anthropic.com/claude-sonnet-5-5</div>`;
+  return el(h);
+}
+
+function pokemon(p = 1) {
+  const send = `<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>`;
+  let h = label(css("sonnet"), "Sonnet 5.5", "2026.09.28");
+  h += `<div class="hl" style="top:250px;font-size:104px">${line("只看截图")}${line("通关《宝可梦 红》", "g")}</div>`;
+  h += `<div style="position:absolute;left:160px;top:560px;width:1060px;height:116px;border-radius:58px;background:var(--ink);display:flex;align-items:center;padding:0 18px 0 52px;justify-content:space-between">` +
+    `<span style="font:500 34px/1 var(--sans);color:#f5f5f2;letter-spacing:-.01em">Play Pokémon Red, screenshots only</span>` +
+    `<span style="width:80px;height:80px;border-radius:50%;background:var(--sonnet);display:flex;align-items:center;justify-content:center">${send}</span></div>`;
+  for (let i = 0; i < 8; i++) {
+    const s = spring(seg(p, i * 0.08, i * 0.08 + 0.4));
+    h += dot(160 + 22 + i * 64, 772, 44 * s, css("sonnet"));
+  }
+  h += `<div style="position:absolute;left:700px;top:756px;font:600 32px/1 var(--sans);letter-spacing:-.01em">8 / 8 <span style="color:var(--grey);font-weight:500">道馆徽章 · gym badges</span></div>`;
+  h += `<div class="en" style="top:850px">The first Sonnet model to beat Pokémon Red working only from screenshots</div>`;
+  h += `<div class="foot">来源 anthropic.com/claude-sonnet-5-5</div>`;
+  return el(h);
+}
+
+function haiku() {
+  const n = el(
+    ring(W / 2, 330, 64, css("haiku"), 6) +
+    `<div style="position:absolute;left:0;right:0;top:420px;text-align:center;font:700 200px/1 var(--sans);letter-spacing:-.05em;color:var(--paper)">Haiku 5.5</div>` +
+    `<div style="position:absolute;left:0;right:0;top:680px;text-align:center;font:500 38px/1.3 var(--sans);color:#a3a39e">为高并发、低成本而生 · 未来几周内</div>` +
+    `<div style="position:absolute;left:0;right:0;top:740px;text-align:center;font:500 28px/1.3 var(--sans);color:#6c6c69">Built for high-volume, cost-sensitive work · in the coming weeks</div>`);
+  n.style.background = css("ink");
+  return n;
+}
+
+function end() {
+  const ds = [[132, "opus"], [92, "sonnet"], [56, "haiku"]], gap = 44, cy = 250;
+  let x = W / 2 - (132 + 92 + 56 + gap * 2) / 2, h = "";
+  for (const [d, k] of ds) {
+    h += k === "haiku" ? ring(x + d / 2, cy, d, "#a9c92a", 6) : dot(x + d / 2, cy, d, css(k));
+    x += d + gap;
+  }
+  const T = measureTitle(176, 488);
+  h += titlePiece(T.a, "Claude 5", 0, T.size) + titlePiece(T.b, "5", 0, T.size) + dot(T.cx, T.cy, T.d, css("ink"));
+  h += `<div style="position:absolute;left:0;right:0;top:640px;text-align:center;font:600 48px/1.2 var(--sans);letter-spacing:-.01em;color:var(--grey)">挑一个尺寸，开始构建</div>`;
+  h += `<div style="position:absolute;left:0;right:0;top:740px;text-align:center;font:500 26px/1 var(--mono);color:var(--grey);white-space:pre">` +
+    `claude-opus-5-5     claude-sonnet-5-5     <span style="font-family:var(--sans)">Haiku 5.5 即将推出</span></div>`;
+  h += `<div style="position:absolute;left:0;right:0;bottom:64px;text-align:center;font:500 19px/1.6 var(--sans);color:var(--grey2)">` +
+    `非官方致敬短片，与 Anthropic 无关联 · 数据来自 anthropic.com（2026 年 9 月）<br>Unofficial fan tribute, not affiliated with Anthropic</div>`;
+  return el(h);
+}
+
+/* ------------------------------------------------------------ transitions */
+
+// A: the hook's big dot becomes the decimal point of "Claude 5.5".
+function morphA(p) {
+  const T = measureTitle(272, 500);
+  const sink = seg(p, 0, 0.3);
+  let h = "";
+  // Medium and small dots spring out; the big one travels and shrinks into the decimal slot.
+  HOOK.slice(1).forEach((c, i) => { const s = 1 - inBack(seg(p, 0.05 + i * 0.06, 0.3 + i * 0.06)); h += dot(c.cx, c.cy, c.d * Math.max(0, s), css("ink")); });
+  const t = io3(seg(p, 0.15, 0.62));
+  const c = HOOK[0];
+  h += dot(lerp(c.cx, T.cx, t), lerp(c.cy, T.cy, t), lerp(c.d, T.d, t), mix(css("ink"), css("opus"), seg(p, 0.45, 0.65)));
+  const yt = 105 * in3(sink);
+  h += `<div style="position:absolute;left:0;right:0;top:590px;text-align:center;font:700 84px/1.1 var(--sans);letter-spacing:-.01em">${line("一个家族，三种尺寸", "", yt)}</div>`;
+  h += `<div style="position:absolute;left:0;right:0;top:710px;text-align:center;font:500 32px/1.3 var(--sans);color:var(--grey)">${line("One family, three sizes", "", yt)}</div>`;
+  const q = seg(p, 0.45, 1);
+  h += titlePiece(T.a, "Claude 5", lerp(105, 0, outExpo(seg(q, 0, 0.6))), T.size);
+  h += titlePiece(T.b, "5", lerp(105, 0, outExpo(seg(q, 0.25, 0.8))), T.size);
+  const y = lerp(105, 0, outExpo(seg(q, 0.5, 1)));
+  h += `<div style="position:absolute;left:0;right:0;top:720px;text-align:center;font:500 34px/1.3 var(--sans);color:var(--grey);letter-spacing:-.005em">` +
+    line(`Opus 5.5 <span style="color:var(--bar1)">&nbsp;·&nbsp;</span> Sonnet 5.5 <span style="color:var(--bar1)">&nbsp;·&nbsp;</span> Haiku 5.5`, "", y) + `</div>`;
+  el(h);
+}
+
+// B: the orange decimal point floods the frame, then contracts into the Opus label dot, revealing the chapter.
+function morphB(p) {
+  const far = (x, y) => Math.max(...[[0, 0], [W, 0], [0, H], [W, H]].map(([a, b]) => Math.hypot(a - x, b - y))) + 4;
+  if (p < 0.5) {
+    const { T } = title(1);
+    const R = lerp(T.d / 2, far(T.cx, T.cy), in3(seg(p, 0, 0.45)));
+    el(dot(T.cx, T.cy, R * 2, css("opus")));
+  } else {
+    const q = seg(p, 0.5, 1);
+    opus(seg(q, 0.35, 1));
+    const lx = 171, ly = 151;
+    const R = lerp(far(lx, ly), 11, out3(seg(q, 0, 0.75)));
+    el(dot(lx, ly, R * 2, css("opus")));
+  }
+}
+
+const FRAMES = { hook, title: () => title(1), opus, chart, price, sonnet, pokemon, haiku, end, morphA, morphB };
+
+window.show = async (name, p = 1) => {
+  await document.fonts.ready;
+  stage.innerHTML = "";
+  FRAMES[name](p);
+};
+const q = new URLSearchParams(location.search);
+window.ready = window.show(q.get("f") || "hook", q.has("p") ? Number(q.get("p")) : 1);
+</script>
+</body>
+</html>

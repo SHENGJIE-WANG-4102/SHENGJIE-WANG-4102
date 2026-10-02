@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude 前世今生</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  :root {
+    --bg: #121110;
+    --ink: #f2eee6;
+    --muted: #a39e93;
+    --faint: #6b665d;
+    --accent: #d97757;
+    --accent-2: #e8b08f;
+    --line: rgba(242, 238, 230, 0.14);
+    --zh-serif: "Noto Serif SC", "Source Serif 4", serif;
+    --zh-sans: "Noto Sans SC", "Inter", sans-serif;
+    --en-serif: "Source Serif 4", "Noto Serif SC", serif;
+    --en-sans: "Inter", "Noto Sans SC", sans-serif;
+    --mono: "JetBrains Mono", "Noto Sans SC", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  #stage {
+    position: absolute; left: 0; top: 0; width: 1920px; height: 1080px;
+    overflow: hidden; background: var(--bg); color: var(--ink);
+    transform-origin: 0 0; font-family: var(--zh-sans);
+    -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
+  }
+  .abs { position: absolute; }
+  .scene > * { will-change: transform, opacity; }
+  canvas#bg { position: absolute; inset: 0; }
+  #grain { position: absolute; inset: -64px; opacity: .45; pointer-events: none; }
+  #vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 75% 70% at 50% 48%, transparent 55%, rgba(0,0,0,.55) 100%);
+  }
+  #fade { position: absolute; inset: 0; background: #000; pointer-events: none; }
+
+  /* chapter label */
+  #chapter { left: 96px; top: 72px; display: flex; align-items: baseline; gap: 18px; }
+  #chapter .num { font: 500 22px var(--mono); color: var(--accent); letter-spacing: .08em; }
+  #chapter .zh { font: 500 24px var(--zh-serif); letter-spacing: .2em; }
+  #chapter .en { font: 600 15px var(--en-sans); color: var(--muted); letter-spacing: .32em; }
+  #brand { right: 96px; top: 76px; font: 600 14px var(--en-sans); letter-spacing: .34em; color: var(--faint); }
+
+  /* subtitles */
+  #sub { left: 0; right: 0; bottom: 64px; text-align: center; }
+  #sub .zh { font: 500 34px/1.35 var(--zh-sans); letter-spacing: .06em; text-shadow: 0 2px 18px rgba(0,0,0,.8); }
+  #sub .en { margin-top: 8px; font: italic 400 23px/1.3 var(--en-serif); color: var(--muted); text-shadow: 0 2px 14px rgba(0,0,0,.8); }
+
+  /* S0 cold open */
+  #s0term { left: 640px; top: 430px; }
+  #s0term .l1 { font: 400 70px/1.2 var(--mono); white-space: pre; }
+  #s0term .l1 .p { color: var(--accent); }
+  #s0term .l2 { margin-top: 18px; padding-left: 84px; font: 400 34px/1.2 var(--mono); color: var(--muted); white-space: pre; }
+  .caret { display: inline-block; width: .5em; height: .9em; background: var(--accent); vertical-align: -.08em; margin-left: .08em; }
+
+  /* S1 history */
+  #year { left: 130px; top: 300px; font: 600 250px/1 var(--en-serif); letter-spacing: -.02em; font-variant-numeric: tabular-nums lining-nums; }
+  #s1div { left: 770px; top: 330px; width: 1px; height: 250px; background: var(--line); }
+  .ms { left: 830px; top: 318px; width: 1000px; }
+  .ms .t-zh { font: 700 68px/1.2 var(--zh-serif); letter-spacing: .02em; }
+  .ms .t-en { margin-top: 6px; font: italic 400 36px/1.25 var(--en-serif); color: var(--accent-2); }
+  .ms .d-zh { margin-top: 30px; font: 400 30px/1.4 var(--zh-sans); color: var(--ink); opacity: .88; }
+  .ms .d-en { margin-top: 6px; font: 400 21px/1.4 var(--en-sans); color: var(--muted); letter-spacing: .01em; }
+  .ms .note { margin-top: 20px; font: 500 22px/1.4 var(--zh-sans); color: var(--accent); letter-spacing: .04em; }
+  .ms .note-en { margin-top: 2px; font: 500 16px/1.4 var(--en-sans); color: var(--accent); opacity: .75; letter-spacing: .02em; }
+  #axis { left: 150px; top: 790px; width: 1620px; height: 60px; }
+  #axis .base { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); }
+  #axis .fill { position: absolute; left: 0; top: 0; height: 2px; margin-top: -.5px; background: linear-gradient(90deg, rgba(217,119,87,0), var(--accent)); }
+  #axis .tick { position: absolute; top: -5px; width: 11px; height: 11px; margin-left: -5.5px; border-radius: 50%; border: 1.5px solid var(--faint); background: var(--bg); }
+  #axis .tick.on { border-color: var(--accent-2); background: var(--accent-2); }
+  #axis .lbl { position: absolute; top: 20px; width: 80px; margin-left: -40px; text-align: center; font: 500 16px var(--mono); color: var(--faint); }
+  #axis .lbl.on { color: var(--ink); }
+  #axis .lbl.up { top: -38px; }
+  #axis .mark { position: absolute; top: -13px; width: 27px; height: 27px; margin-left: -13.5px; border-radius: 50%; border: 1.5px solid var(--accent); box-shadow: 0 0 24px rgba(217,119,87,.7); }
+
+  /* S2 founding */
+  #s2 .c { left: 0; right: 0; text-align: center; }
+  #f-year { top: 236px; font: 500 30px var(--mono); color: var(--accent); letter-spacing: .5em; padding-left: .5em; }
+  #f-name { top: 282px; font: 500 156px/1 var(--en-serif); letter-spacing: .04em; }
+  #f-zh { top: 478px; font: 600 44px/1.3 var(--zh-serif); letter-spacing: .12em; }
+  #f-en { top: 540px; font: italic 400 28px var(--en-serif); color: var(--muted); }
+  #f-rule { top: 612px; left: 900px !important; width: 120px; height: 1px; background: var(--accent); }
+  #f-mz { top: 642px; font: 500 38px/1.3 var(--zh-serif); color: var(--accent-2); letter-spacing: .08em; }
+  #f-me { top: 698px; font: 400 23px var(--en-sans); color: var(--muted); letter-spacing: .02em; }
+  #f-cai { top: 790px; font: 400 22px/1.5 var(--zh-sans); color: var(--muted); }
+  #f-cai b { font-family: var(--mono); font-weight: 500; color: var(--accent); margin-right: 12px; }
+  #f-cai .e { display: block; font: 400 17px var(--en-sans); color: var(--faint); }
+
+  /* S3 models */
+  .card { left: 150px; top: 236px; width: 1160px; }
+  .card .date { font: 500 28px var(--mono); color: var(--accent); letter-spacing: .12em; }
+  .card .name { margin-top: 10px; font: 600 164px/1.05 var(--en-serif); letter-spacing: -.015em; white-space: nowrap; }
+  .card .name.m { font-size: 128px; }
+  .card .name.l { font-size: 116px; }
+  .card .zh { margin-top: 30px; font: 700 50px/1.3 var(--zh-serif); letter-spacing: .04em; }
+  .card .en { margin-top: 8px; font: italic 400 30px/1.3 var(--en-serif); color: var(--muted); }
+  .card .tags { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .card .tag { padding: 8px 18px; border: 1px solid var(--line); border-radius: 999px; font: 500 19px var(--en-sans); color: var(--ink); background: rgba(242,238,230,.04); letter-spacing: .02em; }
+  #ctx { left: 1380px; top: 262px; width: 400px; }
+  #ctx .k-zh { font: 600 22px var(--zh-serif); letter-spacing: .2em; }
+  #ctx .k-en { margin-top: 6px; font: 600 13px var(--en-sans); color: var(--muted); letter-spacing: .32em; }
+  #ctx .val { margin-top: 26px; font: 600 104px/1 var(--en-serif); font-variant-numeric: tabular-nums lining-nums; }
+  #ctx .unit { margin-top: 8px; font: 400 20px var(--en-sans); color: var(--muted); }
+  #ctx .bar { position: relative; margin-top: 30px; height: 6px; border-radius: 3px; background: rgba(242,238,230,.1); }
+  #ctx .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: linear-gradient(90deg, #a8573d, var(--accent), var(--accent-2)); box-shadow: 0 0 18px rgba(217,119,87,.55); }
+  #ctx .scale { position: relative; margin-top: 12px; height: 20px; font: 400 14px var(--mono); color: var(--faint); }
+  #ctx .scale span { position: absolute; transform: translateX(-50%); }
+  #ctx .scale span:last-child { transform: translateX(-100%); }
+  #ctx .foot { margin-top: 18px; font: 400 14px var(--en-sans); color: var(--faint); letter-spacing: .04em; }
+  #track { left: 150px; top: 836px; width: 1620px; height: 60px; }
+  #track .base { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line); }
+  #track .fill { position: absolute; left: 0; top: -.5px; height: 2px; background: linear-gradient(90deg, rgba(217,119,87,.1), var(--accent)); }
+  #track .n { position: absolute; top: -6px; width: 13px; height: 13px; margin-left: -6.5px; border-radius: 50%; border: 1.5px solid var(--faint); background: var(--bg); }
+  #track .n.past { background: var(--ink); border-color: var(--ink); }
+  #track .n.cur { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 7px rgba(217,119,87,.18), 0 0 26px rgba(217,119,87,.8); }
+  #track .l { position: absolute; top: 22px; width: 140px; margin-left: -70px; text-align: center; font: 500 16px var(--mono); color: var(--faint); }
+  #track .l.cur { color: var(--ink); }
+
+  /* S4 products */
+  #p-head { left: 0; right: 0; top: 176px; text-align: center; }
+  #p-head .zh { font: 700 58px var(--zh-serif); letter-spacing: .14em; }
+  #p-head .en { margin-top: 8px; font: italic 400 28px var(--en-serif); color: var(--muted); }
+  .tile { width: 390px; height: 214px; border-radius: 20px; padding: 26px 28px; border: 1px solid var(--line); background: rgba(242,238,230,.035); overflow: hidden; }
+  .tile .hl { position: absolute; inset: -1px; border-radius: 20px; border: 1.5px solid var(--accent); background: radial-gradient(ellipse 90% 80% at 20% 0%, rgba(217,119,87,.22), rgba(217,119,87,0) 70%); opacity: 0; }
+  .tile svg { position: relative; width: 40px; height: 40px; stroke: var(--ink); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .tile .yr { position: absolute; right: 26px; top: 30px; font: 500 16px var(--mono); color: var(--faint); }
+  .tile .nm { position: relative; margin-top: 18px; font: 600 30px var(--en-sans); letter-spacing: -.01em; }
+  .tile .dz { position: relative; margin-top: 10px; font: 500 22px var(--zh-sans); color: var(--ink); opacity: .9; }
+  .tile .de { position: relative; margin-top: 4px; font: 400 16px var(--en-sans); color: var(--muted); }
+
+  /* S5 finale */
+  #q { left: 0; right: 0; top: 430px; text-align: center; }
+  #q .l1 { font: 400 64px/1.2 var(--mono); white-space: pre; }
+  #q .l1 .p { color: var(--accent); }
+  #q .l2 { margin-top: 14px; font: 400 30px var(--mono); color: var(--muted); }
+  #logo { left: 0; right: 0; top: 400px; text-align: center; font: 500 220px/1 var(--en-serif); letter-spacing: .02em; }
+  #tagline { left: 0; right: 0; top: 660px; text-align: center; }
+  #tagline .zh { font: 600 36px var(--zh-serif); letter-spacing: .5em; padding-left: .5em; }
+  #tagline .en { margin-top: 12px; font: 500 17px var(--en-sans); color: var(--muted); letter-spacing: .42em; padding-left: .42em; }
+  #disc { left: 0; right: 0; top: 810px; text-align: center; font: 400 15px var(--en-sans); color: var(--faint); letter-spacing: .08em; }
+
+  /* player chrome (browser viewing only) */
+  #play { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.55); color: #f2eee6; font: 500 20px "Inter", sans-serif; letter-spacing: .1em; cursor: pointer; z-index: 5; }
+  body.viewer #play { display: flex; }
+  body.viewer.playing #play { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="bg" width="1920" height="1080"></canvas>
+
+  <!-- S0 · cold open -->
+  <div id="s0" class="scene">
+    <div id="s0term" class="abs">
+      <div class="l1"><span class="p">&gt; </span><span id="s0a"></span><span class="caret" id="c0a"></span></div>
+      <div class="l2"><span id="s0b"></span><span class="caret" id="c0b"></span></div>
+    </div>
+  </div>
+
+  <!-- S1 · AI history -->
+  <div id="s1" class="scene">
+    <div id="year" class="abs">1950</div>
+    <div id="s1div" class="abs"></div>
+    <div id="msWrap"></div>
+    <div id="axis" class="abs"><div class="base"></div><div class="fill"></div><div class="mark"></div></div>
+  </div>
+
+  <!-- S2 · founding -->
+  <div id="s2" class="scene">
+    <div id="f-year" class="abs c">2021</div>
+    <div id="f-name" class="abs c">Anthropic</div>
+    <div id="f-zh" class="abs c">一家 AI 安全与研究公司</div>
+    <div id="f-en" class="abs c">An AI safety and research company</div>
+    <div id="f-rule" class="abs"></div>
+    <div id="f-mz" class="abs c">打造可靠、可解释、可引导的 AI 系统</div>
+    <div id="f-me" class="abs c">Building reliable, interpretable, and steerable AI systems</div>
+    <div id="f-cai" class="abs c"><b>2022</b>宪法 AI：用一套明确的原则，训练模型的价值观<span class="e">Constitutional AI — shaping a model's values with an explicit set of principles</span></div>
+  </div>
+
+  <!-- S3 · models -->
+  <div id="s3" class="scene">
+    <div id="cardWrap"></div>
+    <div id="ctx" class="abs">
+      <div class="k-zh">上下文窗口</div>
+      <div class="k-en">CONTEXT WINDOW</div>
+      <div class="val">9K</div>
+      <div class="unit">tokens · 一次能读进的内容</div>
+      <div class="bar"><i></i></div>
+      <div class="scale"><span style="left:20%">10K</span><span style="left:60%">100K</span><span style="left:100%">1M</span></div>
+      <div class="foot">log scale · 对数刻度</div>
+    </div>
+    <div id="track" class="abs"><div class="base"></div><div class="fill"></div></div>
+  </div>
+
+  <!-- S4 · products -->
+  <div id="s4" class="scene">
+    <div id="p-head" class="abs"><div class="zh">不止于对话</div><div class="en">Beyond conversation</div></div>
+    <div id="tileWrap"></div>
+  </div>
+
+  <!-- S5 · finale -->
+  <div id="s5" class="scene">
+    <div id="q" class="abs">
+      <div class="l1"><span class="p">&gt; </span><span id="qa"></span><span class="caret" id="cq"></span></div>
+      <div class="l2">Can machines think?</div>
+    </div>
+    <div id="logo" class="abs">Claude</div>
+    <div id="tagline" class="abs"><div class="zh">前世今生</div><div class="en">THE STORY SO FAR · 2021 — 2026</div></div>
+    <div id="disc" class="abs">非官方致敬短片 · Unofficial fan-made tribute, not affiliated with or endorsed by Anthropic</div>
+  </div>
+
+  <div id="chapter" class="abs"><span class="num"></span><span class="zh"></span><span class="en"></span></div>
+  <div id="brand" class="abs">CLAUDE · 前世今生</div>
+  <div id="sub" class="abs"><div class="zh"></div><div class="en"></div></div>
+
+  <canvas id="grain"></canvas>
+  <div id="vignette"></div>
+  <div id="fade"></div>
+</div>
+<div id="play">▶ 点击播放 · CLICK TO PLAY</div>
+
+<script>
+const W = 1920, H = 1080, DURATION = 91;
+const $ = (s) => document.querySelector(s);
+
+// ---------- timing helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, p) => a + (b - a) * p;
+const ease = {
+  lin: (p) => p,
+  out: (p) => 1 - Math.pow(1 - p, 3),
+  outQ: (p) => 1 - Math.pow(1 - p, 5),
+  in: (p) => p * p * p,
+  inOut: (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2),
+};
+const P = (t, a, b, e = ease.out) => e(clamp((t - a) / (b - a)));
+const env = (t, a, b, fi = 0.6, fo = 0.5) => Math.min(P(t, a, a + fi), 1 - P(t, b - fo, b, ease.in));
+const bump = (t, c, w) => ease.inOut(clamp(1 - Math.abs(t - c) / w));
+function show(el, o, { x = 0, y = 0, s = 1, blur = 0 } = {}) {
+  el.style.opacity = o.toFixed(4);
+  el.style.visibility = o <= 0.001 ? "hidden" : "visible";
+  el.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) scale(${s.toFixed(4)})`;
+  el.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : "none";
+}
+function mulberry32(a) {
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+
+// ---------- content ----------
+const SUBS = [
+  [6.3, 15.8, "七十多年来，人类一直在追问同一个问题。", "For over seventy years, we have been chasing a single question."],
+  [16.2, 25.7, "算力、数据与算法，一次次把答案推得更近。", "Compute, data and algorithms kept pulling the answer closer."],
+  [26.4, 30.8, "2021 年，一群研究者决定换一种方式去回答它。", "In 2021, a group of researchers set out to answer it differently."],
+  [31.2, 35.7, "他们相信：AI 越强大，就越需要被认真对待。", "They believed that the more powerful AI becomes, the more care it demands."],
+  [36.4, 43.7, "他们把它命名为 Claude。", "They named it Claude."],
+  [44.2, 51.7, "它学会了看懂图片、实时创作，也学会了操作电脑。", "It learned to see, to create — and to use a computer."],
+  [52.2, 59.7, "它学会了先思考、再回答，还学会了写代码。", "It learned to think before it answers — and to write code."],
+  [60.2, 71.6, "从几分钟的对话，到连续数小时的自主工作。", "From minutes of conversation to hours of autonomous work."],
+  [72.4, 83.6, "今天，它在你的浏览器、终端和桌面里，与你一起工作。", "Today it works beside you — in your browser, your terminal, your desktop."],
+  [86.4, 90.0, "也许更重要的是：它能和你一起思考。", "Perhaps what matters more: it thinks with you."],
+];
+
+const CHAPTERS = [
+  [5.6, 26.0, "01", "缘起", "ORIGINS OF AI"],
+  [26.2, 36.0, "02", "起点", "THE FOUNDING"],
+  [36.2, 72.0, "03", "演进", "THE MODELS"],
+  [72.2, 84.0, "04", "如今", "TODAY"],
+];
+
+const S1_T0 = 6, S1_STEP = 2.5;
+const MILESTONES = [
+  { y: 1950, zh: "图灵之问", en: "Turing's question", dz: "“机器能思考吗？”", de: "“Can machines think?”" },
+  { y: 1956, zh: "“人工智能”诞生", en: "“Artificial Intelligence” gets its name", dz: "达特茅斯会议，一个学科从此开始", de: "The Dartmouth workshop launches a field" },
+  { y: 1986, zh: "反向传播", en: "Backpropagation", dz: "神经网络学会了从错误中学习", de: "Neural networks learn from their mistakes" },
+  { y: 1997, zh: "深蓝", en: "Deep Blue", dz: "计算机击败国际象棋世界冠军", de: "A computer defeats the world chess champion" },
+  { y: 2012, zh: "深度学习爆发", en: "Deep learning takes off", dz: "AlexNet 在 ImageNet 上大幅领先", de: "AlexNet leaps ahead on ImageNet" },
+  { y: 2016, up: true, zh: "AlphaGo · 第 37 手", en: "Move 37", dz: "AI 在围棋上战胜李世石", de: "AI defeats Lee Sedol at Go" },
+  { y: 2017, zh: "Transformer", en: "“Attention Is All You Need”", dz: "今天大语言模型的核心架构", de: "The architecture behind today's large language models" },
+  { y: 2020, zh: "规模定律", en: "Scaling laws", dz: "更大的模型、更多的数据，能力可预期地提升", de: "Bigger models and more data, predictably better", note: "作者中有多位未来的 Anthropic 联合创始人", noteEn: "Co-authored by several future Anthropic co-founders" },
+];
+const AX_Y0 = 1945, AX_Y1 = 2023;
+
+const S3_T0 = 36, S3_STEP = 4;
+const MODELS = [
+  { d: "2023.03", n: "Claude", zh: "首次公开亮相", en: "The first public release", tags: ["Claude", "Claude Instant"], ctx: [9e3], tk: "Claude" },
+  { d: "2023.07", n: "Claude 2", zh: "claude.ai 上线 · 一口气读完一整本书", en: "claude.ai opens — and reads a whole book in one go", tags: ["Claude 2", "Claude 2.1"], ctx: [1e5, 2e5], tk: "2" },
+  { d: "2024.03", n: "Claude 3", zh: "三档家族，第一次“看见”世界", en: "A family of three — and it can see", tags: ["Haiku", "Sonnet", "Opus", "Vision"], ctx: [2e5], tk: "3" },
+  { d: "2024.06", n: "Claude 3.5 Sonnet", zh: "Artifacts 实时创作 · 学会操作电脑", en: "Artifacts, and computer use", tags: ["Artifacts", "Computer Use"], ctx: [2e5], tk: "3.5" },
+  { d: "2025.02", n: "Claude 3.7 Sonnet", zh: "混合推理：先思考，再回答", en: "Hybrid reasoning — it thinks before it answers", tags: ["Extended thinking", "Claude Code"], ctx: [2e5], tk: "3.7" },
+  { d: "2025.05", n: "Claude 4", zh: "能连续工作数小时的智能体", en: "Agents that work for hours on end", tags: ["Opus 4", "Sonnet 4"], ctx: [2e5], tk: "4" },
+  { d: "2025.09", n: "Claude 4.5", zh: "编程与智能体能力再上台阶", en: "A new high for coding and agents", tags: ["Sonnet 4.5", "Haiku 4.5", "Opus 4.5"], ctx: [2e5], tk: "4.5" },
+  { d: "2026.02", n: "Claude 4.6 → 4.8", zh: "百万 token 上下文，迭代越来越快", en: "A million-token context, shipping faster than ever", tags: ["Opus 4.6", "Sonnet 4.6", "Opus 4.7", "Opus 4.8"], ctx: [1e6], tk: "4.6–4.8" },
+  { d: "2026.06 — 09", n: "Claude 5", zh: "新一代：更聪明、更快、更自主", en: "A new generation — smarter, faster, more autonomous", tags: ["Sonnet 5", "Opus 5", "Fable 5.1", "Opus 5.5"], ctx: [1e6], tk: "5" },
+];
+
+const ICONS = {
+  chat: '<path d="M7 8h26a4 4 0 0 1 4 4v13a4 4 0 0 1-4 4H19l-8 6v-6H7a4 4 0 0 1-4-4V12a4 4 0 0 1 4-4z"/><path d="M12 17h16M12 22h10"/>',
+  art: '<rect x="5" y="4" width="24" height="32" rx="3"/><path d="M11 13h12M11 19h12M11 25h7"/><path d="M33 6v8M29 10h8"/>',
+  cursor: '<path d="M9 5l0 28 7.5-7 5 11 5-2.3-5-10.7H32z"/>',
+  mcp: '<circle cx="20" cy="20" r="5"/><circle cx="7" cy="8" r="3.5"/><circle cx="33" cy="8" r="3.5"/><circle cx="7" cy="32" r="3.5"/><circle cx="33" cy="32" r="3.5"/><path d="M9.5 10.5l6.5 6M30.5 10.5l-6.5 6M9.5 29.5l6.5-6M30.5 29.5l-6.5-6"/>',
+  term: '<rect x="3" y="6" width="34" height="28" rx="4"/><path d="M10 15l6 5-6 5M19 26h10"/>',
+  skill: '<path d="M20 5l15 7.5-15 7.5-15-7.5z"/><path d="M5 20l15 7.5 15-7.5"/><path d="M5 27.5L20 35l15-7.5"/>',
+  globe: '<circle cx="20" cy="20" r="15"/><path d="M5 20h30M20 5c4.5 4.2 6.5 9.2 6.5 15S24.5 30.8 20 35c-4.5-4.2-6.5-9.2-6.5-15S15.5 9.2 20 5z"/>',
+  folder: '<path d="M4 11a3 3 0 0 1 3-3h8l4 4h14a3 3 0 0 1 3 3v15a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"/><path d="M13 22l4 4 9-9"/>',
+};
+const PRODUCTS = [
+  { i: "chat", y: "2023", n: "claude.ai", dz: "随时随地对话", de: "Chat, anywhere" },
+  { i: "art", y: "2024", n: "Artifacts", dz: "边聊边创作", de: "Create as you talk" },
+  { i: "cursor", y: "2024", n: "Computer Use", dz: "像人一样操作电脑", de: "Uses a computer the way you do" },
+  { i: "mcp", y: "2024", n: "MCP", dz: "连接任何工具与数据", de: "Connects to any tool or data" },
+  { i: "term", y: "2025", n: "Claude Code", dz: "终端里的编程搭档", de: "A coding partner in your terminal" },
+  { i: "skill", y: "2025", n: "Agent Skills", dz: "可复用的专业技能", de: "Reusable expertise, on demand" },
+  { i: "globe", y: "2025", n: "Claude in Chrome", dz: "在浏览器里替你办事", de: "Gets things done in your browser" },
+  { i: "folder", y: "2026", n: "Cowork", dz: "在桌面上与你协作", de: "Works with your files, on your desktop" },
+];
+const S4_T0 = 72;
+
+// ---------- build DOM ----------
+const msEls = MILESTONES.map((m) => {
+  const e = el("div", "ms abs");
+  e.append(el("div", "t-zh", m.zh), el("div", "t-en", m.en), el("div", "d-zh", m.dz), el("div", "d-en", m.de));
+  if (m.note) e.append(el("div", "note", m.note), el("div", "note-en", m.noteEn));
+  $("#msWrap").append(e);
+  return e;
+});
+const axX = (y) => ((y - AX_Y0) / (AX_Y1 - AX_Y0)) * 1620;
+const axTicks = MILESTONES.map((m) => {
+  const t = el("div", "tick"); t.style.left = axX(m.y) + "px";
+  const l = el("div", "lbl", String(m.y)); l.style.left = axX(m.y) + "px";
+  if (m.up) l.classList.add("up");
+  $("#axis").append(t, l);
+  return [t, l];
+});
+
+const cardEls = MODELS.map((m) => {
+  const e = el("div", "card abs");
+  const name = el("div", "name", m.n);
+  if (m.n.length > 14) name.classList.add("l"); else if (m.n.length > 9) name.classList.add("m");
+  const tags = el("div", "tags");
+  m.tags.forEach((t) => tags.append(el("span", "tag", t)));
+  const parts = [el("div", "date", m.d), name, el("div", "zh", m.zh), el("div", "en", m.en), tags];
+  e.append(...parts);
+  $("#cardWrap").append(e);
+  return { e, parts };
+});
+const trX = (i) => (i / (MODELS.length - 1)) * 1620;
+const trEls = MODELS.map((m, i) => {
+  const n = el("div", "n"); n.style.left = trX(i) + "px";
+  const l = el("div", "l", m.tk); l.style.left = trX(i) + "px";
+  $("#track").append(n, l);
+  return [n, l];
+});
+
+const tileEls = PRODUCTS.map((p, j) => {
+  const e = el("div", "tile abs");
+  e.style.left = 135 + (j % 4) * 420 + "px";
+  e.style.top = 330 + Math.floor(j / 4) * 244 + "px";
+  const hl = el("div", "hl");
+  e.append(hl, el("div", "", `<svg viewBox="0 0 40 40">${ICONS[p.i]}</svg>`), el("div", "yr", p.y), el("div", "nm", p.n), el("div", "dz", p.dz), el("div", "de", p.de));
+  $("#tileWrap").append(e);
+  return { e, hl };
+});
+
+// ---------- background ----------
+const cv = $("#bg"), g = cv.getContext("2d");
+const rnd = mulberry32(20210);
+const NODES = Array.from({ length: 170 }, () => ({
+  x: rnd() * W, y: rnd() * H, ph: rnd() * Math.PI * 2, sp: 0.15 + rnd() * 0.35, amp: 18 + rnd() * 40,
+  r: 0.9 + rnd() * 1.9, born: rnd(), hot: rnd() < 0.12, ang: rnd() * Math.PI * 2, rad: 0.72 + rnd() * 0.38, dz: 0.3 + rnd() * 0.7,
+}));
+
+function drawBG(t) {
+  g.globalCompositeOperation = "source-over";
+  g.fillStyle = "#121110"; g.fillRect(0, 0, W, H);
+
+  // warm ambient orb (grows through the model section)
+  const pm = clamp((t - 36) / 36);
+  const wOrb = env(t, 34.5, 84.5, 2.0, 1.0);
+  if (wOrb > 0) {
+    const cx = lerp(1500, 1380, pm), cy = 470, r = lerp(420, 760, pm);
+    const gr = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+    gr.addColorStop(0, `rgba(217,119,87,${(0.10 + 0.14 * pm) * wOrb})`);
+    gr.addColorStop(0.5, `rgba(217,119,87,${(0.035 + 0.05 * pm) * wOrb})`);
+    gr.addColorStop(1, "rgba(217,119,87,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    const gr2 = g.createRadialGradient(260, 980, 0, 260, 980, 700);
+    gr2.addColorStop(0, `rgba(120,140,170,${0.06 * wOrb})`); gr2.addColorStop(1, "rgba(120,140,170,0)");
+    g.fillStyle = gr2; g.fillRect(0, 0, W, H);
+  }
+
+  // S1–S2 neural network
+  const wNet = env(t, 4.8, 36.6, 1.6, 1.6);
+  const grow = clamp((t - 5) / 20);
+  const conv = P(t, 26, 29.5, ease.inOut) * (1 - P(t, 34.4, 36.6, ease.inOut));
+  // S3–S4 drifting dust
+  const wDust = env(t, 35.0, 84.6, 1.6, 1.0);
+  // S5 converge
+  const fin = P(t, 85.8, 89.0, ease.inOut);
+
+  const pts = NODES.map((n) => {
+    let x = n.x + Math.sin(t * n.sp + n.ph) * n.amp;
+    let y = n.y + Math.cos(t * n.sp * 0.8 + n.ph * 1.3) * n.amp * 0.7;
+    if (conv > 0) {
+      const a = n.ang + t * 0.1;
+      const rx = W / 2 + Math.cos(a) * 640 * n.rad, ry = 480 + Math.sin(a) * 330 * n.rad;
+      x = lerp(x, rx, conv); y = lerp(y, ry, conv);
+    }
+    const vis = clamp((grow * 1.12 - n.born) / 0.06) * (n.born < 0.04 ? 1 : 1);
+    return { x, y, v: vis * wNet, n };
+  });
+
+  if (wNet > 0.002) {
+    g.lineWidth = 1;
+    const D = 175;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i]; if (a.v <= 0) continue;
+      for (let j = i + 1; j < pts.length; j++) {
+        const b = pts[j]; if (b.v <= 0) continue;
+        const dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy;
+        if (d2 > D * D) continue;
+        const k = Math.pow(1 - Math.sqrt(d2) / D, 1.6) * a.v * b.v;
+        const hot = a.n.hot || b.n.hot;
+        g.strokeStyle = hot ? `rgba(217,119,87,${0.42 * k})` : `rgba(242,238,230,${0.2 * k})`;
+        g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+      }
+    }
+    for (const p of pts) {
+      if (p.v <= 0) continue;
+      const tw = 0.65 + 0.35 * Math.sin(t * 2.2 + p.n.ph * 3);
+      g.fillStyle = p.n.hot ? `rgba(232,176,143,${0.95 * p.v * tw})` : `rgba(242,238,230,${0.6 * p.v * tw})`;
+      g.beginPath(); g.arc(p.x, p.y, p.n.r * (p.n.hot ? 1.6 : 1), 0, Math.PI * 2); g.fill();
+      if (p.n.hot) {
+        const gg = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, 16);
+        gg.addColorStop(0, `rgba(217,119,87,${0.35 * p.v * tw})`); gg.addColorStop(1, "rgba(217,119,87,0)");
+        g.fillStyle = gg; g.fillRect(p.x - 16, p.y - 16, 32, 32);
+      }
+    }
+  }
+
+  if (conv > 0.002) {
+    g.save(); g.translate(960, 540); g.scale(1.55, 1);
+    const dk = g.createRadialGradient(0, 0, 0, 0, 0, 430);
+    dk.addColorStop(0, `rgba(18,17,16,${0.82 * conv})`); dk.addColorStop(0.7, `rgba(18,17,16,${0.55 * conv})`); dk.addColorStop(1, "rgba(18,17,16,0)");
+    g.fillStyle = dk; g.fillRect(-700, -540, 1400, 1080); g.restore();
+  }
+
+  // dust field (models → products → finale)
+  const wD = Math.max(wDust, env(t, 84.0, 90.6, 1.0, 1.0) * 0.8);
+  if (wD > 0.002) {
+    for (const n of NODES) {
+      let x = ((n.x - t * 26 * n.dz) % W + W) % W;
+      let y = n.y + Math.sin(t * 0.3 + n.ph) * 14;
+      if (fin > 0) {
+        const a = n.ang + t * 0.22, rr = lerp(900, 160 + 260 * n.rad, fin);
+        x = lerp(x, W / 2 + Math.cos(a) * rr * 1.6, fin); y = lerp(y, 505 + Math.sin(a) * rr * 0.55, fin);
+      }
+      const al = (0.12 + 0.3 * n.dz) * wD * (n.hot ? 1.4 : 1);
+      g.fillStyle = n.hot ? `rgba(232,176,143,${al})` : `rgba(242,238,230,${al * 0.7})`;
+      g.beginPath(); g.arc(x, y, n.r * n.dz * 1.1, 0, Math.PI * 2); g.fill();
+    }
+  }
+
+  // S4 faint grid
+  const wGrid = env(t, 71.8, 84.2, 1.0, 0.7);
+  if (wGrid > 0.002) {
+    g.strokeStyle = `rgba(242,238,230,${0.035 * wGrid})`; g.lineWidth = 1;
+    const off = (t * 12) % 60;
+    g.beginPath();
+    for (let x = -60 + off; x < W; x += 60) { g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, H); }
+    for (let y = 0; y < H; y += 60) { g.moveTo(0, y + 0.5); g.lineTo(W, y + 0.5); }
+    g.stroke();
+  }
+
+  // S5 glow behind the name
+  const wEnd = env(t, 85.8, 90.8, 1.6, 1.0);
+  if (wEnd > 0.002) {
+    const pulse = 1 + 0.05 * Math.sin(t * 1.6);
+    const gr = g.createRadialGradient(W / 2, 505, 0, W / 2, 505, 720 * pulse);
+    gr.addColorStop(0, `rgba(217,119,87,${0.30 * wEnd})`);
+    gr.addColorStop(0.45, `rgba(217,119,87,${0.08 * wEnd})`);
+    gr.addColorStop(1, "rgba(217,119,87,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  }
+
+  // cold-open pinpoint
+  const w0 = env(t, 0.2, 5.8, 1.2, 0.6);
+  if (w0 > 0) {
+    const gr = g.createRadialGradient(960, 520, 0, 960, 520, 820);
+    gr.addColorStop(0, `rgba(217,119,87,${0.08 * w0})`); gr.addColorStop(1, "rgba(217,119,87,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  }
+}
+
+// film grain: pre-baked tile, offset each frame
+const grain = $("#grain");
+grain.width = W + 128; grain.height = H + 128;
+(() => {
+  const gc = grain.getContext("2d"), tile = document.createElement("canvas");
+  tile.width = tile.height = 256;
+  const tc = tile.getContext("2d"), id = tc.createImageData(256, 256), r = mulberry32(99);
+  for (let i = 0; i < id.data.length; i += 4) {
+    const v = r() * 255; id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = 10;
+  }
+  tc.putImageData(id, 0, 0);
+  gc.fillStyle = gc.createPattern(tile, "repeat"); gc.fillRect(0, 0, grain.width, grain.height);
+})();
+
+// ---------- scene renderers ----------
+function typed(str, t, t0, dt) { const n = clamp(Math.floor((t - t0) / dt) + 1, 0, str.length); return t < t0 ? "" : str.slice(0, n); }
+
+function renderS0(t) {
+  const o = env(t, 0.3, 5.75, 0.5, 0.7);
+  const out = P(t, 5.05, 5.75, ease.in);
+  show($("#s0term"), o, { s: 1 + out * 0.05, blur: out * 10, y: -out * 10 });
+  const A = "机器能思考吗？", B = "Can machines think?";
+  $("#s0a").textContent = typed(A, t, 0.8, 0.17);
+  $("#s0b").textContent = typed(B, t, 2.5, 0.065);
+  const blink = Math.floor(t * 2.2) % 2 === 0 ? 1 : 0;
+  const onA = t < 2.4, typingA = t > 0.8 && t < 2.0, typingB = t > 2.5 && t < 3.75;
+  $("#c0a").style.opacity = onA ? (typingA ? 1 : blink) : 0;
+  $("#c0b").style.opacity = !onA ? (typingB ? 1 : blink) : 0;
+}
+
+function renderS1(t) {
+  const wS = env(t, 5.65, 26.2, 0.7, 0.6);
+  const k = clamp(Math.floor((t - S1_T0) / S1_STEP), 0, MILESTONES.length - 1);
+  const lt = t - S1_T0 - k * S1_STEP;
+  let yr = MILESTONES[k].y;
+  if (k > 0 && lt < 0.65) yr = Math.round(lerp(MILESTONES[k - 1].y, yr, P(lt, 0, 0.65, ease.inOut)));
+  const yEl = $("#year");
+  if (yEl.textContent !== String(yr)) yEl.textContent = yr;
+  show(yEl, wS, { y: (1 - P(t, 5.65, 6.4)) * 30 });
+  show($("#s1div"), wS, { y: 0 });
+  MILESTONES.forEach((m, i) => {
+    const a = S1_T0 + i * S1_STEP, b = a + S1_STEP;
+    const last = i === MILESTONES.length - 1;
+    const o = Math.min(env(t, a + 0.12, last ? 26.1 : b + 0.05, 0.45, 0.32), wS);
+    const pin = P(t, a + 0.12, a + 0.75);
+    const pout = last ? 0 : P(t, b - 0.32, b + 0.05, ease.in);
+    show(msEls[i], o, { y: (1 - pin) * 34 - pout * 18, blur: (1 - pin) * 6 + pout * 5 });
+  });
+  const ax = $("#axis");
+  show(ax, wS);
+  const mx = axX(yr);
+  ax.querySelector(".fill").style.width = mx + "px";
+  ax.querySelector(".mark").style.left = mx + "px";
+  axTicks.forEach(([tk, lb], i) => {
+    const on = MILESTONES[i].y <= yr;
+    tk.classList.toggle("on", on); lb.classList.toggle("on", i === k);
+  });
+}
+
+function renderS2(t) {
+  const end = 35.8;
+  show($("#f-year"), env(t, 26.2, end, 0.6, 0.5), { y: (1 - P(t, 26.2, 26.9)) * 16 });
+  const pn = P(t, 26.6, 28.2, ease.outQ);
+  const nm = $("#f-name");
+  nm.style.letterSpacing = lerp(0.3, 0.04, pn).toFixed(3) + "em";
+  show(nm, env(t, 26.6, end, 1.1, 0.5), { blur: (1 - pn) * 14, s: lerp(1.04, 1, pn) });
+  show($("#f-zh"), env(t, 27.9, end, 0.6, 0.5), { y: (1 - P(t, 27.9, 28.6)) * 18 });
+  show($("#f-en"), env(t, 28.1, end, 0.6, 0.5), { y: (1 - P(t, 28.1, 28.8)) * 18 });
+  const pr = P(t, 29.6, 30.4, ease.inOut);
+  const rule = $("#f-rule"); rule.style.width = 120 * pr + "px"; rule.style.left = 960 - 60 * pr + "px";
+  show(rule, env(t, 29.6, end, 0.3, 0.5));
+  show($("#f-mz"), env(t, 30.0, end, 0.6, 0.5), { y: (1 - P(t, 30.0, 30.7)) * 18 });
+  show($("#f-me"), env(t, 30.2, end, 0.6, 0.5), { y: (1 - P(t, 30.2, 30.9)) * 18 });
+  show($("#f-cai"), env(t, 32.2, end, 0.7, 0.5), { y: (1 - P(t, 32.2, 33.0)) * 18 });
+}
+
+const log10 = Math.log10;
+function ctxAt(t) {
+  const i = clamp(Math.floor((t - S3_T0) / S3_STEP), 0, MODELS.length - 1);
+  const a = S3_T0 + i * S3_STEP;
+  const endOf = (m) => log10(m.ctx[m.ctx.length - 1]);
+  const prev = i > 0 ? endOf(MODELS[i - 1]) : log10(MODELS[0].ctx[0]);
+  const m = MODELS[i];
+  let v = lerp(prev, log10(m.ctx[0]), P(t, a + 0.2, a + 1.2, ease.inOut));
+  if (m.ctx.length > 1) v = lerp(v, log10(m.ctx[1]), P(t, a + 1.9, a + 2.9, ease.inOut));
+  return v;
+}
+function fmtTokens(v) {
+  const n = Math.pow(10, v);
+  if (n >= 995000) return "1M";
+  if (n >= 100000) return Math.round(n / 10000) * 10 + "K";
+  return Math.round(n / 1000) + "K";
+}
+
+function renderS3(t) {
+  const wS = env(t, 35.9, 72.1, 0.6, 0.5);
+  const cur = clamp(Math.floor((t - S3_T0) / S3_STEP), 0, MODELS.length - 1);
+  MODELS.forEach((m, i) => {
+    const a = S3_T0 + i * S3_STEP, b = a + S3_STEP;
+    const last = i === MODELS.length - 1;
+    const bb = last ? 72.1 : b + 0.05;
+    const o = Math.min(env(t, a + 0.05, bb, 0.3, 0.33), wS);
+    const c = cardEls[i];
+    if (o <= 0.001) { c.e.style.visibility = "hidden"; c.e.style.opacity = 0; return; }
+    const pout = last ? P(t, 71.6, 72.1, ease.in) : P(t, b - 0.33, b + 0.05, ease.in);
+    show(c.e, o, { x: -pout * 50, blur: pout * 6 });
+    [0.05, 0.12, 0.35, 0.5, 0.65].forEach((d, k) => {
+      const p = P(t, a + d, a + d + 0.6, ease.outQ);
+      show(c.parts[k], p, { x: (1 - p) * (k === 1 ? 70 : 40), blur: (1 - p) * (k === 1 ? 10 : 4) });
+    });
+  });
+  // context meter
+  const cx = $("#ctx");
+  show(cx, env(t, 36.3, 72.0, 0.7, 0.5), { x: (1 - P(t, 36.3, 37.1)) * 30 });
+  const v = ctxAt(t);
+  const txt = fmtTokens(v);
+  const val = cx.querySelector(".val"); if (val.textContent !== txt) val.textContent = txt;
+  cx.querySelector(".bar i").style.width = clamp((v - 3.5) / 2.5) * 100 + "%";
+  // track
+  const tr = $("#track");
+  show(tr, env(t, 36.2, 72.0, 0.7, 0.5), { y: (1 - P(t, 36.2, 37.0)) * 20 });
+  const a = S3_T0 + cur * S3_STEP;
+  const fx = lerp(cur > 0 ? trX(cur - 1) : 0, trX(cur), P(t, a, a + 0.7, ease.inOut));
+  tr.querySelector(".fill").style.width = fx + "px";
+  trEls.forEach(([n, l], i) => {
+    n.classList.toggle("past", i < cur); n.classList.toggle("cur", i === cur); l.classList.toggle("cur", i === cur);
+  });
+}
+
+function renderS4(t) {
+  const end = 84.0;
+  show($("#p-head"), env(t, 72.3, end, 0.7, 0.5), { y: (1 - P(t, 72.3, 73.0)) * 20 });
+  tileEls.forEach(({ e, hl }, j) => {
+    const a = S4_T0 + 0.8 + 0.28 * j;
+    const p = P(t, a, a + 0.6, ease.outQ);
+    const o = Math.min(p, 1 - P(t, 83.3 + j * 0.03, 83.9 + j * 0.03, ease.in));
+    show(e, o, { y: (1 - p) * 46, s: lerp(0.95, 1, p) });
+    hl.style.opacity = bump(t, 76.2 + 0.85 * j, 0.95).toFixed(3);
+  });
+}
+
+function renderS5(t) {
+  const q = $("#q");
+  const up = P(t, 85.85, 86.75, ease.inOut);
+  const oq = Math.min(env(t, 84.0, 90.8, 0.3, 0.8), lerp(1, 0.42, up));
+  show(q, oq, { y: -up * 250, s: lerp(1, 0.62, up) });
+  $("#qa").textContent = typed("机器能思考吗？", t, 84.2, 0.14);
+  const blink = Math.floor(t * 2.2) % 2 === 0 ? 1 : 0;
+  $("#cq").style.opacity = t < 85.2 ? 1 : blink * (1 - up);
+  show(q.querySelector(".l2"), P(t, 85.1, 85.6));
+  const pl = P(t, 86.5, 88.1, ease.outQ);
+  const lg = $("#logo");
+  lg.style.letterSpacing = lerp(0.18, 0.02, pl).toFixed(3) + "em";
+  show(lg, env(t, 86.5, 90.8, 1.2, 0.8), { blur: (1 - pl) * 18, y: (1 - pl) * 18 });
+  show($("#tagline"), env(t, 87.2, 90.8, 0.9, 0.8), { y: (1 - P(t, 87.2, 88.0)) * 14 });
+  show($("#disc"), env(t, 88.0, 90.8, 0.8, 0.8));
+}
+
+function renderChrome(t) {
+  const ch = CHAPTERS.find(([a, b]) => t >= a - 0.1 && t <= b + 0.1);
+  const c = $("#chapter");
+  if (ch) {
+    const [a, b, num, zh, en] = ch;
+    if (c.dataset.k !== num) {
+      c.dataset.k = num;
+      c.querySelector(".num").textContent = num; c.querySelector(".zh").textContent = zh; c.querySelector(".en").textContent = en;
+    }
+    show(c, env(t, a, b, 0.6, 0.4), { x: (1 - P(t, a, a + 0.8)) * -16 });
+  } else show(c, 0);
+  show($("#brand"), env(t, 5.6, 84.0, 1.0, 0.6) * 0.9);
+
+  const s = SUBS.find(([a, b]) => t >= a && t <= b);
+  const sub = $("#sub");
+  if (s) {
+    if (sub.dataset.k !== String(s[0])) {
+      sub.dataset.k = String(s[0]);
+      sub.querySelector(".zh").textContent = s[2]; sub.querySelector(".en").textContent = s[3];
+    }
+    show(sub, env(t, s[0], s[1], 0.35, 0.35), { y: (1 - P(t, s[0], s[0] + 0.45)) * 8 });
+  } else show(sub, 0);
+
+  const fade = Math.max(1 - P(t, 0, 0.5, ease.lin), P(t, 90.1, 91.0, ease.inOut));
+  $("#fade").style.opacity = fade.toFixed(4);
+  const gt = Math.floor(t * 15) / 15;
+  grain.style.transform = `translate(${-((gt * 997) % 64)}px, ${-((gt * 613) % 64)}px)`;
+}
+
+function seek(t) {
+  t = clamp(t, 0, DURATION);
+  drawBG(t);
+  renderS0(t); renderS1(t); renderS2(t); renderS3(t); renderS4(t); renderS5(t);
+  renderChrome(t);
+}
+window.seek = seek;
+window.DURATION = DURATION;
+
+// ---------- browser viewer (not used when rendering) ----------
+const params = new URLSearchParams(location.search);
+window.fontsReady = document.fonts.ready.then(() => seek(Number(params.get("t") || 0)));
+if (!params.has("render")) {
+  document.body.classList.add("viewer");
+  const fit = () => {
+    const s = Math.min(innerWidth / W, innerHeight / H);
+    const st = $("#stage");
+    st.style.transform = `scale(${s})`;
+    st.style.left = (innerWidth - W * s) / 2 + "px"; st.style.top = (innerHeight - H * s) / 2 + "px";
+  };
+  addEventListener("resize", fit); fit();
+  const audio = new Audio("music.m4a");
+  let t0 = null;
+  const loop = (now) => {
+    if (t0 === null) return;
+    const t = audio.readyState >= 2 && !audio.paused ? audio.currentTime : (now - t0) / 1000;
+    seek(t);
+    if (t < DURATION) requestAnimationFrame(loop); else { document.body.classList.remove("playing"); t0 = null; }
+  };
+  $("#play").addEventListener("click", () => {
+    document.body.classList.add("playing");
+    audio.currentTime = 0; audio.play().catch(() => {});
+    t0 = performance.now(); requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude 5.5 家族</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  :root {
+    --paper: #f3f0ea;
+    --ink: #141210;
+    --white: #fffdf8;
+    --opus: #ec5b2e;
+    --sonnet: #2546e8;
+    --haiku: #cfef46;
+    --lcd: #9bbc0f;
+    --lcd-dark: #0f380f;
+    --fg: var(--ink);
+    --disp: "Inter Tight", "Noto Sans SC", sans-serif;
+    --zh: "Noto Sans SC", "Inter Tight", sans-serif;
+    --mono: "JetBrains Mono", "Noto Sans SC", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  #stage {
+    position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden;
+    background: var(--paper); color: var(--ink); transform-origin: 0 0; font-family: var(--zh);
+    -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
+  }
+  .abs { position: absolute; }
+  .world { position: absolute; inset: 0; visibility: hidden; }
+  #w-opus { background: var(--opus); }
+  #w-sonnet { background: var(--sonnet); }
+  #w-haiku { background: var(--haiku); }
+  #w-end { background: var(--paper); }
+  .scene { position: absolute; inset: 0; display: none; }
+  .m { position: absolute; overflow: hidden; padding: 0 .06em .08em 0; }
+  .m > * { display: block; }
+  [data-fx] { will-change: transform, opacity; }
+
+  /* type scale */
+  .giant { font: 900 290px/0.92 var(--disp); letter-spacing: -0.05em; white-space: nowrap; }
+  .zh-xl { font: 900 72px/1.2 var(--zh); letter-spacing: .02em; }
+  .zh-l { font: 700 54px/1.3 var(--zh); letter-spacing: .02em; }
+  .zh-m { font: 700 40px/1.35 var(--zh); }
+  .zh-s { font: 500 26px/1.4 var(--zh); }
+  .en-l { font: 600 34px/1.3 var(--disp); letter-spacing: -0.01em; }
+  .en-m { font: 500 27px/1.35 var(--disp); }
+  .mono { font: 500 24px/1.3 var(--mono); letter-spacing: .04em; white-space: pre; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* HUD */
+  #hud { position: absolute; inset: 0; color: var(--fg); pointer-events: none; }
+  #hud-tl { left: 96px; top: 58px; font: 700 20px var(--mono); letter-spacing: .16em; white-space: pre; }
+  #hud-tl span { font-weight: 500; opacity: .7; }
+  #hud-tr { right: 96px; top: 58px; font: 500 17px var(--mono); letter-spacing: .14em; opacity: .7; }
+  #hud-beats { left: 96px; bottom: 56px; display: flex; gap: 8px; }
+  #hud-beats i { width: 14px; height: 14px; border: 2px solid currentColor; }
+  #hud-beats i.on { background: currentColor; }
+  #hud-prog { left: 200px; right: 340px; bottom: 62px; height: 2px; background: currentColor; opacity: .18; }
+  #hud-fill { left: 200px; bottom: 62px; height: 2px; width: 0; background: currentColor; }
+  #hud-bar { right: 96px; bottom: 52px; font: 500 18px var(--mono); letter-spacing: .14em; white-space: pre; }
+
+  /* S0 */
+  .dot { position: absolute; border-radius: 50%; visibility: hidden; }
+  #f-opus { background: var(--opus); } #f-sonnet { background: var(--sonnet); } #f-haiku { background: var(--haiku); }
+  .word .zh { font: 900 300px/1.1 var(--zh); letter-spacing: .02em; white-space: nowrap; }
+  .word .en { font: 900 150px/1 var(--disp); letter-spacing: -0.04em; }
+  #t55 { left: 0; right: 0; top: 150px; text-align: center; font: 900 600px/1 var(--disp); letter-spacing: -0.06em; }
+  #t55 i { display: inline-block; width: .2em; height: .2em; border-radius: 50%; margin: 0 .04em 0 .06em; vertical-align: 0; }
+
+  /* S1 lineup */
+  .rule { position: absolute; width: 2px; background: var(--ink); opacity: .14; }
+  .col { position: absolute; top: 0; width: 560px; height: 1080px; }
+  .col .ball { position: absolute; left: 48px; border-radius: 50%; }
+  .col .name { position: absolute; left: 48px; top: 516px; font: 800 92px/1 var(--disp); letter-spacing: -0.04em; white-space: nowrap; }
+  .col .stat { position: absolute; left: 50px; top: 644px; font: 500 21px var(--mono); letter-spacing: .06em; white-space: pre; }
+  .col .rz { position: absolute; left: 48px; top: 700px; font: 700 40px/1.3 var(--zh); }
+  .col .re { position: absolute; left: 50px; top: 762px; width: 440px; font: 500 26px/1.35 var(--disp); opacity: .75; }
+  #soon {
+    left: 1290px; top: 360px; padding: 10px 22px 12px; border: 5px solid var(--ink); color: var(--ink);
+    font: 900 44px/1 var(--disp); letter-spacing: .06em; white-space: nowrap; background: var(--paper);
+  }
+  #soon small { display: block; margin-top: 6px; font: 700 22px var(--zh); letter-spacing: .3em; }
+
+  /* charts */
+  .grp { position: absolute; top: 360px; width: 540px; }
+  .grp h3 { font: 800 40px/1.1 var(--disp); letter-spacing: -0.02em; white-space: nowrap; }
+  .grp h4 { margin-top: 8px; font: 500 24px var(--zh); opacity: .8; }
+  .row { position: absolute; left: 0; width: 540px; height: 70px; }
+  .row .lab { position: absolute; left: 0; top: 0; font: 500 19px var(--mono); letter-spacing: .05em; }
+  .row .bar { position: absolute; left: 0; top: 28px; height: 34px; background: var(--ink); transform-origin: 0 50%; }
+  .row .bar.dim { opacity: .28; }
+  .row .val { position: absolute; top: 22px; font: 800 38px/1 var(--disp); letter-spacing: -0.02em; }
+
+  /* race */
+  .lane { position: absolute; left: 120px; width: 1680px; height: 46px; }
+  .lane .lab { position: absolute; left: 0; top: 8px; font: 500 22px var(--mono); white-space: pre; }
+  .lane .track { position: absolute; left: 380px; right: 0; top: 0; height: 46px; border: 3px solid var(--ink); }
+  .lane .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: var(--ink); transform-origin: 0 50%; }
+  .lane .fill.dim { opacity: .3; }
+  .lane .done { position: absolute; right: 18px; top: 2px; font: 800 28px var(--disp); color: var(--white); }
+
+  /* price */
+  .prow { position: absolute; left: 120px; width: 1680px; height: 120px; }
+  .prow .pl { position: absolute; left: 0; top: 26px; font: 700 40px var(--zh); }
+  .prow .pl small { display: block; margin-top: 2px; font: 500 20px var(--mono); letter-spacing: .1em; opacity: .7; }
+  .prow .old { position: absolute; left: 520px; top: 14px; font: 700 88px/1 var(--disp); opacity: .5; letter-spacing: -0.03em; }
+  .prow .old .st { position: absolute; left: -8px; right: -8px; top: 46px; height: 8px; background: var(--ink); transform-origin: 0 50%; }
+  .prow .arr { position: absolute; left: 900px; top: 20px; font: 500 72px/1 var(--disp); }
+  .prow .new { position: absolute; left: 1040px; top: 0; font: 900 120px/1 var(--disp); letter-spacing: -0.04em; color: var(--white); }
+
+  /* head to head */
+  .hrow { position: absolute; left: 120px; width: 1680px; height: 108px; border-top: 2px solid rgba(255,253,248,.22); }
+  .hrow .hl { position: absolute; left: 0; top: 22px; font: 700 40px/1.1 var(--disp); white-space: nowrap; }
+  .hrow .hl small { display: block; margin-top: 6px; font: 500 22px var(--zh); opacity: .75; }
+  .hrow .v1, .hrow .v2 { position: absolute; top: 20px; font: 900 66px/1 var(--disp); letter-spacing: -0.03em; white-space: nowrap; }
+  .hrow .v1 { left: 820px; } .hrow .v2 { left: 1300px; opacity: .6; }
+  .hrow .win { color: var(--haiku); }
+  .tag {
+    padding: 12px 26px 14px; background: var(--haiku); color: var(--ink);
+    font: 900 40px/1 var(--disp); letter-spacing: .02em; white-space: nowrap;
+  }
+
+  /* LCD */
+  #lcd { left: 120px; top: 230px; width: 600px; height: 560px; border-radius: 34px 34px 90px 34px; background: rgba(255,253,248,.14); }
+  #lcd .scr { position: absolute; left: 50px; top: 50px; width: 500px; height: 420px; background: var(--lcd); border-radius: 6px; overflow: hidden; }
+  .badge, .badge::before, .badge b { clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
+  .badge { position: absolute; width: 72px; height: 72px; background: var(--lcd-dark); }
+  .badge::before { content: ""; position: absolute; inset: 6px; background: var(--lcd); }
+  .badge b { position: absolute; inset: 14px; background: var(--lcd-dark); visibility: hidden; }
+  #clear { position: absolute; left: 90px; top: 268px; }
+
+  /* haiku */
+  .outline { color: var(--haiku); letter-spacing: -0.03em; text-shadow: 5.00px 0.00px 0 var(--ink), 4.62px 1.91px 0 var(--ink), 3.54px 3.54px 0 var(--ink), 1.91px 4.62px 0 var(--ink), 0.00px 5.00px 0 var(--ink), -1.91px 4.62px 0 var(--ink), -3.54px 3.54px 0 var(--ink), -4.62px 1.91px 0 var(--ink), -5.00px 0.00px 0 var(--ink), -4.62px -1.91px 0 var(--ink), -3.54px -3.54px 0 var(--ink), -1.91px -4.62px 0 var(--ink), -0.00px -5.00px 0 var(--ink), 1.91px -4.62px 0 var(--ink), 3.54px -3.54px 0 var(--ink), 4.62px -1.91px 0 var(--ink); }
+  #load { left: 120px; top: 840px; width: 1240px; height: 40px; border: 4px solid var(--ink); }
+  #load-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: var(--ink); transform-origin: 0 50%; }
+  .caret { display: inline-block; width: .55em; height: 1em; background: currentColor; vertical-align: -.15em; margin-left: .2em; }
+
+  /* finale */
+  #lock { left: 0; right: 0; top: 440px; text-align: center; font: 900 230px/1 var(--disp); letter-spacing: -0.05em; }
+  .flab { position: absolute; top: 412px; font: 600 18px var(--mono); letter-spacing: .2em; transform: translateX(-50%); visibility: hidden; }
+
+  #fade { position: absolute; inset: 0; background: var(--paper); opacity: 0; pointer-events: none; }
+  #play { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.55); color: #fffdf8; font: 600 20px "Inter Tight", sans-serif; letter-spacing: .1em; cursor: pointer; z-index: 5; }
+  body.viewer #play { display: flex; }
+  body.viewer.playing #play { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="w-opus" class="world"></div>
+  <div id="w-sonnet" class="world"></div>
+  <div id="w-haiku" class="world"></div>
+  <div id="w-end" class="world"></div>
+
+  <!-- ===== S0a · three dots (beats 0–8) ===== -->
+  <section class="scene" data-in="0" data-out="8">
+    <div class="abs mono" style="left:0;right:0;top:330px;text-align:center;opacity:.7" data-fx="fade" data-in="1">2026 · 09        CLAUDE 5.5</div>
+  </section>
+
+  <!-- ===== S0b · four words (beats 8–16) ===== -->
+  <section class="scene word" data-in="8" data-out="10" style="background:var(--opus)">
+    <div class="abs zh" style="left:104px;top:190px" data-fx="slam" data-in="8">更聪明</div>
+    <div class="abs en" style="left:120px;top:600px" data-fx="slide" data-in="8.25" data-dx="-160">SMARTER</div>
+  </section>
+  <section class="scene word" data-in="10" data-out="12" style="background:var(--sonnet);color:var(--white)">
+    <div class="abs zh" style="right:104px;top:190px" data-fx="slam" data-in="10">更快</div>
+    <div class="abs en" style="right:120px;top:600px" data-fx="slide" data-in="10.25" data-dx="160">FASTER</div>
+  </section>
+  <section class="scene word" data-in="12" data-out="14" style="background:var(--haiku)">
+    <div class="abs zh" style="left:104px;top:190px" data-fx="slam" data-in="12">更省</div>
+    <div class="abs en" style="left:120px;top:600px" data-fx="slide" data-in="12.25" data-dx="-160">CHEAPER</div>
+  </section>
+  <section class="scene word" data-in="14" data-out="16" style="background:var(--ink);color:var(--paper)">
+    <div class="abs zh" style="right:104px;top:190px" data-fx="slam" data-in="14">更安全</div>
+    <div class="abs en" style="right:120px;top:600px" data-fx="slide" data-in="14.25" data-dx="160">SAFER</div>
+  </section>
+
+  <!-- ===== S0c · title (beats 16–24) ===== -->
+  <section class="scene" data-in="16" data-out="24">
+    <div class="m" style="left:0;right:0;top:118px;text-align:center"><div class="en-l" style="font:800 96px/1.05 var(--disp);letter-spacing:-0.03em" data-fx="rise" data-in="16.5">Claude</div></div>
+    <div id="t55" class="abs" data-fx="slam" data-in="16" data-drift="0.012">5<i id="tdot"></i>5</div>
+    <div class="m" style="left:0;right:0;top:812px;text-align:center"><div class="zh-l" data-fx="rise" data-in="20">三个尺寸，一个家族</div></div>
+    <div class="m" style="left:0;right:0;top:892px;text-align:center"><div class="en-l" style="opacity:.7" data-fx="rise" data-in="20.5">Three sizes. One family.</div></div>
+  </section>
+
+  <!-- ===== S1 · lineup (beats 24–36) ===== -->
+  <section class="scene" data-in="24" data-out="36">
+    <div class="rule" style="left:680px;top:250px;height:640px" data-fx="grow-y" data-in="24"></div>
+    <div class="rule" style="left:1240px;top:250px;height:640px" data-fx="grow-y" data-in="24.25"></div>
+    <div class="col" style="left:120px" data-fx="rise-in" data-in="24">
+      <div class="ball" style="top:280px;width:200px;height:200px;background:var(--opus)"></div>
+      <div class="name">Opus 5.5</div>
+      <div class="stat">2026.09.22  ●  已发布 AVAILABLE</div>
+      <div class="rz">复杂工作，审慎判断</div>
+      <div class="re">Complex work, careful judgment</div>
+    </div>
+    <div class="col" style="left:680px" data-fx="rise-in" data-in="25">
+      <div class="ball" style="top:330px;width:150px;height:150px;background:var(--sonnet)"></div>
+      <div class="name">Sonnet 5.5</div>
+      <div class="stat">2026.09.28  ●  已发布 AVAILABLE</div>
+      <div class="rz">日常任务，更快更省</div>
+      <div class="re">Everyday work, faster, for less</div>
+    </div>
+    <div class="col" style="left:1240px" data-fx="rise-in" data-in="26">
+      <div class="ball" style="top:380px;width:100px;height:100px;background:var(--haiku)"></div>
+      <div class="name" style="opacity:.45">Haiku 5.5</div>
+      <div class="stat">未来几周  ○  即将推出 SOON</div>
+      <div class="rz">高并发，低成本</div>
+      <div class="re">High volume, cost-sensitive</div>
+    </div>
+    <div id="soon" class="abs" data-fx="stamp" data-in="28">COMING SOON<small>即将推出</small></div>
+  </section>
+
+  <!-- ===== S2 · OPUS 5.5 (beats 36–88) ===== -->
+  <!-- 2a title -->
+  <section class="scene" data-in="36" data-out="44">
+    <div class="abs giant" style="left:100px;top:150px" data-fx="slam" data-in="36" data-drift="0.01">Opus 5.5</div>
+    <div class="abs mono" style="left:120px;top:500px;font-size:28px" data-fx="type" data-in="37" data-cps="40">2026.09.22  —  claude-opus-5-5</div>
+    <div class="m" style="left:120px;top:620px"><div class="zh-xl" data-fx="rise" data-in="38">Claude 5.5 家族的第一个模型</div></div>
+    <div class="m" style="left:120px;top:724px"><div class="en-l" data-fx="rise" data-in="38.5">The first model in the Claude 5.5 family.</div></div>
+  </section>
+  <!-- 2b performance & cost -->
+  <section class="scene" data-in="44" data-out="52">
+    <div class="abs mono" style="left:120px;top:170px" data-fx="fade" data-in="44">性能 / PERFORMANCE</div>
+    <div class="m" style="left:120px;top:218px"><div style="font:900 110px/1.1 var(--zh);letter-spacing:-0.01em" data-fx="rise" data-in="44">Fable 5.1 级的表现</div></div>
+    <div class="m" style="left:120px;top:352px"><div class="en-l" data-fx="rise" data-in="44.5">Performs at the level of Fable 5.1 on most work.</div></div>
+    <div class="abs giant num" style="left:96px;top:500px;font-size:330px;color:var(--white)" data-fx="slam" data-in="48">−<span data-fx="count" data-in="48" data-from="0" data-to="40" data-dur="0.9">0</span>%</div>
+    <div class="m" style="left:1080px;top:590px"><div class="zh-l" data-fx="rise" data-in="49">运行成本<br>比 Opus 5 低 40%</div></div>
+    <div class="m" style="left:1080px;top:740px"><div class="en-m" data-fx="rise" data-in="49.5">Costs 40% less to run than Opus 5.</div></div>
+  </section>
+  <!-- 2c benchmarks -->
+  <section class="scene" data-in="52" data-out="64">
+    <div class="m" style="left:120px;top:150px"><div class="zh-xl" data-fx="rise" data-in="52">关键跑分</div></div>
+    <div class="m" style="left:120px;top:248px"><div class="en-l" data-fx="rise" data-in="52.5">Key benchmarks · Opus 5.5 vs. Fable 5.1 vs. Opus 5</div></div>
+    <div class="grp" style="left:120px" data-g="53">
+      <h3>Terminal-Bench 4.0</h3><h4>智能体编程 · Agentic coding</h4>
+      <div class="row" style="top:120px" data-v="66.4" data-lab="Opus 5.5"></div>
+      <div class="row" style="top:210px" data-v="55.8" data-lab="Fable 5.1"></div>
+      <div class="row" style="top:300px" data-v="52.3" data-lab="Opus 5"></div>
+    </div>
+    <div class="grp" style="left:700px" data-g="55">
+      <h3>OSWorld 2.1</h3><h4>操作电脑 · Computer use</h4>
+      <div class="row" style="top:120px" data-v="81.8" data-lab="Opus 5.5"></div>
+      <div class="row" style="top:210px" data-v="80.7" data-lab="Fable 5.1"></div>
+      <div class="row" style="top:300px" data-v="74.0" data-lab="Opus 5"></div>
+    </div>
+    <div class="grp" style="left:1280px" data-g="57">
+      <h3>Humanity’s Last Exam</h3><h4>多学科推理（含工具）· With tools</h4>
+      <div class="row" style="top:120px" data-v="67.7" data-lab="Opus 5.5"></div>
+      <div class="row" style="top:210px" data-v="65.6" data-lab="Fable 5.1"></div>
+      <div class="row" style="top:300px" data-v="63.6" data-lab="Opus 5"></div>
+    </div>
+    <div class="abs mono" style="left:120px;top:870px;font-size:18px;opacity:.75" data-fx="fade" data-in="58">数据来源：Anthropic 发布页 2026.09.22 · max effort    SOURCE: ANTHROPIC.COM</div>
+  </section>
+  <!-- 2d speed -->
+  <section class="scene" data-in="64" data-out="72">
+    <div class="abs giant num" style="left:96px;top:130px;font-size:300px;color:var(--white)" data-fx="slam" data-in="64">+<span data-fx="count" data-in="64" data-from="0" data-to="30" data-dur="0.8">0</span>%</div>
+    <div class="m" style="left:1000px;top:190px"><div class="zh-l" data-fx="rise" data-in="65">输出速度<br>比 Opus 5 快 30% 以上</div></div>
+    <div class="m" style="left:1000px;top:340px"><div class="en-m" data-fx="rise" data-in="65.5">Generates output 30%+ faster than Opus 5.</div></div>
+    <div class="lane" style="top:560px" data-fx="fade" data-in="65.5"><div class="lab">Opus 5</div><div class="track"><div class="fill dim" data-race="66,2.4"></div></div></div>
+    <div class="lane" style="top:650px" data-fx="fade" data-in="65.5"><div class="lab">Opus 5.5</div><div class="track"><div class="fill" data-race="66,1.85"></div><div class="done" data-fx="pop" data-in="69.95">✓</div></div></div>
+    <div class="lane" style="top:740px" data-fx="fade" data-in="65.5"><div class="lab">Opus 5.5  Fast</div><div class="track"><div class="fill" data-race="66,0.74"></div><div class="done" data-fx="pop" data-in="67.6">2.5×</div></div></div>
+    <div class="m" style="left:500px;top:820px"><div class="zh-s" data-fx="rise" data-in="68">快速模式：最高 2.5 倍速度 · Fast mode: up to 2.5× speed</div></div>
+    <div class="abs mono" style="left:1580px;top:510px;font-size:17px;opacity:.7" data-fx="fade" data-in="66">示意 ILLUSTRATIVE</div>
+  </section>
+  <!-- 2e price -->
+  <section class="scene" data-in="72" data-out="80">
+    <div class="m" style="left:120px;top:150px"><div class="zh-xl" data-fx="rise" data-in="72">更低的价格</div></div>
+    <div class="m" style="left:120px;top:248px"><div class="en-l" data-fx="rise" data-in="72.5">Price per million tokens, vs. Opus 5</div></div>
+    <div class="prow" style="top:380px" data-fx="fade" data-in="73">
+      <div class="pl">输入<small>INPUT</small></div>
+      <div class="old">$5<div class="st" data-fx="strike" data-in="73.5"></div></div><div class="arr">→</div>
+      <div class="new" data-fx="slam" data-in="74">$4</div>
+    </div>
+    <div class="prow" style="top:540px" data-fx="fade" data-in="75">
+      <div class="pl">输出<small>OUTPUT</small></div>
+      <div class="old">$25<div class="st" data-fx="strike" data-in="75.5"></div></div><div class="arr">→</div>
+      <div class="new" data-fx="slam" data-in="76">$20</div>
+    </div>
+    <div class="prow" style="top:700px" data-fx="fade" data-in="77">
+      <div class="pl">缓存读取<small>CACHE READS</small></div>
+      <div class="old">$0.50<div class="st" data-fx="strike" data-in="77.5"></div></div><div class="arr">→</div>
+      <div class="new" data-fx="slam" data-in="78">$0.20</div>
+    </div>
+  </section>
+  <!-- 2f safety -->
+  <section class="scene" data-in="80" data-out="88">
+    <div class="abs mono" style="left:120px;top:170px" data-fx="fade" data-in="80">安全 / SAFETY</div>
+    <div class="abs giant num" style="left:96px;top:205px;font-size:300px;color:var(--white)" data-fx="slam" data-in="80">~<span data-fx="count" data-in="80" data-from="0" data-to="2000" data-dur="1.0">0</span></div>
+    <div class="m" style="left:120px;top:540px"><div class="zh-l" data-fx="rise" data-in="81">个场景的自动化行为审计中，</div></div>
+    <div class="m" style="left:120px;top:614px"><div class="zh-l" data-fx="rise" data-in="81.5">几乎每一项不当行为指标，都优于近期所有 Claude 模型。</div></div>
+    <div class="m" style="left:120px;top:730px;width:1440px"><div class="en-m" data-fx="rise" data-in="82.5">Across nearly 2,000 scenarios in an automated behavioral audit, it scored better than any recent Claude model on nearly every measure of misaligned behavior.</div></div>
+    <div class="dot" style="left:1625px;top:805px;width:150px;height:150px;background:var(--sonnet)" data-fx="pop" data-in="86"></div>
+  </section>
+
+  <!-- ===== S3 · SONNET 5.5 (beats 88–124) ===== -->
+  <section class="scene" data-in="88" data-out="96" style="color:var(--white)">
+    <div class="abs giant" style="left:100px;top:150px" data-fx="slam" data-in="88" data-drift="0.01">Sonnet 5.5</div>
+    <div class="abs mono" style="left:120px;top:500px;font-size:28px" data-fx="type" data-in="89" data-cps="40">2026.09.28  —  claude-sonnet-5-5</div>
+    <div class="m" style="left:120px;top:620px"><div class="zh-xl" data-fx="rise" data-in="90">家族第二位，为日常工作而生</div></div>
+    <div class="m" style="left:120px;top:724px"><div class="en-l" data-fx="rise" data-in="90.5">The second of the family, built for everyday work.</div></div>
+  </section>
+  <section class="scene" data-in="96" data-out="104" style="color:var(--white)">
+    <div class="abs giant num" style="left:96px;top:240px;font-size:250px" data-fx="slam" data-in="96"><span data-fx="count" data-in="96" data-from="0" data-to="30" data-dur="0.7">0</span>%+</div>
+    <div class="m" style="left:120px;top:540px"><div class="zh-l" data-fx="rise" data-in="96.5">比 Sonnet 5 快 30% 以上</div></div>
+    <div class="m" style="left:120px;top:620px"><div class="en-m" data-fx="rise" data-in="97">Runs 30%+ faster than Sonnet 5.</div></div>
+    <div class="abs giant num" style="left:1000px;top:240px;font-size:250px;color:var(--haiku)" data-fx="slam" data-in="98">−<span data-fx="count" data-in="98" data-from="0" data-to="30" data-dur="0.7">0</span>%</div>
+    <div class="m" style="left:1024px;top:540px"><div class="zh-l" data-fx="rise" data-in="98.5">多数工作，成本最多低 30%</div></div>
+    <div class="m" style="left:1024px;top:620px"><div class="en-m" data-fx="rise" data-in="99">Costs up to 30% less for most work.</div></div>
+    <div class="m" style="left:120px;top:800px"><div class="zh-s" style="opacity:.8" data-fx="rise" data-in="100">每百万 tokens 仍是 $2 输入 / $10 输出 · Same price as Sonnet 5: $2 / $10 per million tokens</div></div>
+  </section>
+  <section class="scene" data-in="104" data-out="116" style="color:var(--white)">
+    <div class="m" style="left:120px;top:140px"><div class="zh-xl" data-fx="rise" data-in="104">编程跑分，反超 Opus 5.5</div></div>
+    <div class="m" style="left:120px;top:238px"><div class="en-l" data-fx="rise" data-in="104.5">Beats Opus 5.5 on Terminal-Bench 4.0, at half the price.</div></div>
+    <div class="abs mono" style="left:940px;top:352px;color:var(--haiku)" data-fx="fade" data-in="105">SONNET 5.5</div>
+    <div class="abs mono" style="left:1420px;top:352px;opacity:.6" data-fx="fade" data-in="105">OPUS 5.5</div>
+    <div class="hrow" style="top:400px" data-fx="rise-in" data-in="106">
+      <div class="hl">Terminal-Bench 4.0<small>智能体编程 · Agentic coding</small></div>
+      <div class="v1 win" style="left:940px">70.6%</div><div class="v2" style="left:1420px">66.4%</div>
+    </div>
+    <div class="hrow" style="top:508px" data-fx="rise-in" data-in="107">
+      <div class="hl">GDPval-AA v2.1<small>知识工作 Elo · Knowledge work</small></div>
+      <div class="v1" style="left:940px">1844</div><div class="v2" style="left:1420px">1846</div>
+    </div>
+    <div class="hrow" style="top:616px" data-fx="rise-in" data-in="108">
+      <div class="hl">OSWorld 2.1<small>操作电脑 · Computer use</small></div>
+      <div class="v1" style="left:940px">80.1%</div><div class="v2" style="left:1420px">81.8%</div>
+    </div>
+    <div class="hrow" style="top:724px;border-bottom:2px solid rgba(255,253,248,.22)" data-fx="rise-in" data-in="109">
+      <div class="hl">价格 Price<small>每百万 tokens 输入 / 输出 · In / out per MTok</small></div>
+      <div class="v1 win" style="left:940px">$2 / $10</div><div class="v2" style="left:1420px">$4 / $20</div>
+    </div>
+    <div class="abs tag" style="left:940px;top:868px" data-fx="stamp" data-in="112" data-rot="-3">半价 · HALF THE PRICE</div>
+  </section>
+  <section class="scene" data-in="116" data-out="124" style="color:var(--white)">
+    <div id="lcd" class="abs" data-fx="rise-in" data-in="116">
+      <div class="scr">
+        <div class="badge" style="left:46px;top:50px"><b data-fx="show" data-in="117"></b></div>
+        <div class="badge" style="left:156px;top:50px"><b data-fx="show" data-in="117.5"></b></div>
+        <div class="badge" style="left:266px;top:50px"><b data-fx="show" data-in="118"></b></div>
+        <div class="badge" style="left:376px;top:50px"><b data-fx="show" data-in="118.5"></b></div>
+        <div class="badge" style="left:46px;top:150px"><b data-fx="show" data-in="119"></b></div>
+        <div class="badge" style="left:156px;top:150px"><b data-fx="show" data-in="119.5"></b></div>
+        <div class="badge" style="left:266px;top:150px"><b data-fx="show" data-in="120"></b></div>
+        <div class="badge" style="left:376px;top:150px"><b data-fx="show" data-in="120.5"></b></div>
+        <canvas id="clear" width="320" height="56" data-fx="blink" data-in="121"></canvas>
+      </div>
+    </div>
+    <div class="abs mono" style="left:800px;top:250px;color:var(--haiku)" data-fx="fade" data-in="116.5">彩蛋 / FUN FACT</div>
+    <div class="m" style="left:800px;top:300px"><div class="zh-xl" style="font-size:66px" data-fx="rise" data-in="117">第一个只看截图，</div></div>
+    <div class="m" style="left:800px;top:390px"><div class="zh-xl" style="font-size:66px" data-fx="rise" data-in="117.5">就通关《宝可梦 红》的 Sonnet</div></div>
+    <div class="m" style="left:800px;top:510px;width:960px"><div class="en-l" data-fx="rise" data-in="118.5">The first Sonnet model to beat Pokémon Red working only from screenshots.</div></div>
+    <div class="abs mono num" style="left:800px;top:680px;font-size:30px" data-fx="fade" data-in="117">BADGES  <span data-fx="count" data-in="117" data-from="0" data-to="8" data-dur="1.9" data-ease="lin">0</span>/8</div>
+    <div class="dot" style="left:1670px;top:830px;width:100px;height:100px;background:var(--haiku)" data-fx="pop" data-in="122"></div>
+  </section>
+
+  <!-- ===== S4 · HAIKU 5.5 (beats 124–136) ===== -->
+  <section class="scene" data-in="124" data-out="136">
+    <div class="abs giant outline" style="left:100px;top:170px" data-fx="slam" data-in="124" data-drift="0.01">Haiku 5.5</div>
+    <div class="abs mono" style="left:120px;top:520px;font-size:30px;font-weight:700" data-fx="type" data-in="125" data-cps="24" data-caret="1">COMING SOON · 即将到来</div>
+    <div class="m" style="left:120px;top:610px"><div class="zh-xl" data-fx="rise" data-in="126">为高并发、对成本敏感的应用而生</div></div>
+    <div class="m" style="left:120px;top:714px"><div class="en-l" data-fx="rise" data-in="126.5">Built for high-volume, cost-sensitive applications.</div></div>
+    <div id="load" class="abs" data-fx="fade" data-in="127"><div id="load-fill"></div></div>
+    <div class="abs mono" style="left:1400px;top:846px;font-size:22px" data-fx="fade" data-in="128">未来几周内 · IN THE COMING WEEKS</div>
+    <div class="dot" style="left:1720px;top:860px;width:80px;height:80px;background:var(--paper);box-shadow:0 0 0 4px var(--ink)" data-fx="pop" data-in="134"></div>
+  </section>
+
+  <!-- ===== S5 · finale (beats 136–160) ===== -->
+  <section class="scene" data-in="136" data-out="160">
+    <div id="lock" class="abs" data-fx="slam" data-in="140" data-drift="0.006">Claude 5.5</div>
+    <div class="m" style="left:0;right:0;top:712px;text-align:center"><div class="zh-l" data-fx="rise" data-in="144">挑一个尺寸，开始构建。</div></div>
+    <div class="m" style="left:0;right:0;top:790px;text-align:center"><div class="en-l" style="opacity:.7" data-fx="rise" data-in="144.5">Pick your size. Start building.</div></div>
+    <div class="abs mono" style="left:0;right:0;top:900px;text-align:center;font-size:22px" data-fx="type" data-in="148" data-cps="60">claude-opus-5-5    claude-sonnet-5-5    haiku 5.5 → soon</div>
+    <div class="abs" style="left:0;right:0;top:986px;text-align:center;font:500 17px/1.5 var(--zh);opacity:.6" data-fx="fade" data-in="150">非官方致敬短片，与 Anthropic 无关联 · 数据来自 anthropic.com（2026 年 9 月）<br><span style="font-family:var(--disp)">Unofficial fan tribute, not affiliated with Anthropic · Data: anthropic.com, September 2026</span></div>
+  </section>
+
+  <!-- family dots (intro + finale), driven from JS -->
+  <div id="f-opus" class="dot"></div><div id="f-sonnet" class="dot"></div><div id="f-haiku" class="dot"></div>
+  <div class="flab" id="fl-opus">OPUS</div><div class="flab" id="fl-sonnet">SONNET</div><div class="flab" id="fl-haiku">HAIKU</div>
+
+  <div id="hud">
+    <div id="hud-tl" class="abs">CLAUDE 5.5<span id="hud-sec"></span></div>
+    <div id="hud-tr" class="abs">FAN-MADE · 非官方</div>
+    <div id="hud-beats" class="abs"><i></i><i></i><i></i><i></i></div>
+    <div id="hud-prog" class="abs"></div><div id="hud-fill" class="abs"></div>
+    <div id="hud-bar" class="abs">BAR 01 · 128 BPM</div>
+  </div>
+  <div id="fade"></div>
+</div>
+<div id="play">▶ 点击播放 · CLICK TO PLAY</div>
+
+<script>
+const W = 1920, H = 1080;
+const BPM = 128, BEAT = 60 / BPM, BEATS = 160, DURATION = BEATS * BEAT; // 40 bars, 75 s
+const tb = (b) => b * BEAT;
+const $ = (s) => document.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, p) => a + (b - a) * p;
+const ease = {
+  lin: (p) => p,
+  out: (p) => 1 - Math.pow(1 - p, 3),
+  outQ: (p) => 1 - Math.pow(1 - p, 5),
+  in: (p) => p * p * p,
+  inOut: (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2),
+  back: (p) => { const c = 1.9; return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2); },
+};
+const P = (t, a, b, e = ease.out) => e(clamp((t - a) / (b - a)));
+
+// ---------- generated markup ----------
+// benchmark rows: label, bar, value
+$$(".row[data-v]").forEach((r) => {
+  const v = +r.dataset.v, w = v * 4.6, top = r.dataset.lab === "Opus 5.5";
+  r.innerHTML = `<div class="lab">${r.dataset.lab}</div><div class="bar${top ? "" : " dim"}" style="width:${w}px"></div><div class="val" style="left:${w + 16}px">${v.toFixed(1)}%</div>`;
+});
+// pixel "CLEAR!" on the LCD (5×7 bitmap font)
+{
+  const G = {
+    C: [".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."],
+    L: ["#....", "#....", "#....", "#....", "#....", "#....", "#####"],
+    E: ["#####", "#....", "#....", "####.", "#....", "#....", "#####"],
+    A: [".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+    R: ["####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"],
+    "!": ["..#..", "..#..", "..#..", "..#..", "..#..", ".....", "..#.."],
+  };
+  const c = $("#clear").getContext("2d"), px = 8;
+  c.fillStyle = "#0f380f";
+  [..."CLEAR!"].forEach((ch, i) => G[ch].forEach((row, y) => [...row].forEach((v, x) => {
+    if (v === "#") c.fillRect(i * 6 * px + x * px, y * px, px, px);
+  })));
+}
+
+// ---------- declarative effects ----------
+const SCENES = $$(".scene").map((el) => ({ el, a: tb(+el.dataset.in), b: tb(+el.dataset.out) }));
+const FX = $$("[data-fx]").map((el) => {
+  const d = el.dataset;
+  const f = { el, fx: d.fx, a: tb(+d.in), d, base: parseFloat(getComputedStyle(el).opacity) };
+  if (d.fx === "type") { f.text = el.textContent; el.textContent = ""; }
+  if (d.fx === "count") { f.from = +d.from; f.to = +d.to; f.dur = +d.dur; f.dec = (d.to.split(".")[1] || "").length; }
+  return f;
+});
+const RACES = $$("[data-race]").map((el) => { const [b, s] = el.dataset.race.split(",").map(Number); return { el, a: tb(b), dur: s }; });
+const GROUPS = $$(".grp[data-g]").map((el) => ({ el, a: tb(+el.dataset.g), bars: $$(".bar", el), vals: $$(".val", el), labs: $$(".lab", el) }));
+
+function setT(f, o, tf) {
+  const el = f.el;
+  el.style.visibility = o <= 0.001 ? "hidden" : "visible";
+  el.style.opacity = (o * f.base).toFixed(4);
+  el.style.transform = tf || "";
+}
+
+function applyFX(f, t) {
+  const { el, fx, a, d } = f;
+  const s = t - a;
+  const S = (o, tf) => setT(f, o, tf);
+  if (s < 0) {
+    if (fx === "count") el.textContent = fmt(f.from, f.dec);
+    else if (fx === "type") el.textContent = "";
+    else el.style.visibility = "hidden";
+    return;
+  }
+  const drift = d.drift ? 1 + +d.drift * s : 1;
+  switch (fx) {
+    case "fade": S(P(t, a, a + 0.35)); break;
+    case "show": S(1); break;
+    case "rise": {
+      const p = ease.outQ(clamp(s / 0.55));
+      S(1, `translateY(${((1 - p) * 108).toFixed(2)}%)`); break;
+    }
+    case "rise-in": {
+      const p = ease.outQ(clamp(s / 0.6));
+      S(clamp(s / 0.2), `translateY(${((1 - p) * 70).toFixed(2)}px)`); break;
+    }
+    case "slam": {
+      const p = ease.outQ(clamp(s / 0.38));
+      const k = el.classList.contains("giant") ? 1 + 0.012 * kick(t) : 1;
+      S(clamp(s / 0.04), `scale(${((1.16 - 0.16 * p) * drift * k).toFixed(4)})`); break;
+    }
+    case "slide": {
+      const p = ease.outQ(clamp(s / 0.45));
+      S(clamp(s / 0.12), `translateX(${((1 - p) * +d.dx).toFixed(2)}px)`); break;
+    }
+    case "pop": S(1, `scale(${Math.max(0, ease.back(clamp(s / 0.42))).toFixed(4)})`); break;
+    case "stamp": {
+      const p = ease.outQ(clamp(s / 0.2));
+      S(clamp(s / 0.06), `rotate(${d.rot || -8}deg) scale(${(1.7 - 0.7 * p).toFixed(4)})`); break;
+    }
+    case "strike": S(1, `scaleX(${ease.inOut(clamp(s / 0.3)).toFixed(4)})`); break;
+    case "grow-y": el.style.transformOrigin = "50% 0"; S(1, `scaleY(${ease.outQ(clamp(s / 0.7)).toFixed(4)})`); break;
+    case "blink": S(Math.floor(s / (BEAT / 2)) % 2 === 0 || s > BEAT * 2 ? 1 : 0); break;
+    case "type": {
+      const n = Math.floor(s * (+d.cps || 30));
+      const shown = f.text.slice(0, n);
+      const caret = d.caret && Math.floor(s / BEAT) % 2 === 0 ? '<span class="caret"></span>' : "";
+      el.innerHTML = shown.replace(/&/g, "&amp;").replace(/</g, "&lt;") + caret;
+      el.style.visibility = "visible"; break;
+    }
+    case "count": {
+      const e = d.ease === "lin" ? ease.lin : ease.out;
+      el.textContent = fmt(lerp(f.from, f.to, e(clamp(s / f.dur))), f.dec); break;
+    }
+  }
+}
+const fmt = (v, dec) => v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+// ---------- colour worlds (circular wipes) ----------
+const WIPES = [
+  // element, start beat, end beat, centre, start radius, hide after beat
+  ["#w-opus", 35, 36, [268, 380], 100, 92],
+  ["#w-sonnet", 87, 88, [1700, 880], 75, 128],
+  ["#w-haiku", 123, 124, [1720, 880], 50, 140],
+  ["#w-end", 135, 136, [1760, 900], 40, 999],
+];
+function renderWorlds(t) {
+  for (const [sel, b0, b1, [cx, cy], r0, off] of WIPES) {
+    const el = $(sel);
+    if (t < tb(b0) || t >= tb(off)) { el.style.visibility = "hidden"; continue; }
+    el.style.visibility = "visible";
+    const p = P(t, tb(b0), tb(b1), (x) => x * x * x);
+    el.style.clipPath = p >= 1 ? "none" : `circle(${lerp(r0, 2300, p).toFixed(1)}px at ${cx}px ${cy}px)`;
+  }
+}
+
+// ---------- family dots: intro (beats 4–8) and finale (beats 137–160) ----------
+const FAM = [["#f-opus", "#fl-opus"], ["#f-sonnet", "#fl-sonnet"], ["#f-haiku", "#fl-haiku"]];
+function rowLayout(ds, gap, base) {
+  const total = ds.reduce((s, d) => s + d, 0) + gap * (ds.length - 1);
+  let x = (W - total) / 2;
+  return ds.map((d) => { const r = { x, y: base - d, d }; x += d + gap; return r; });
+}
+const INTRO = rowLayout([240, 176, 120], 44, 640);
+const FINAL = rowLayout([180, 132, 90], 40, 384);
+function renderFamily(t) {
+  const b = t / BEAT;
+  FAM.forEach(([sel, lab], i) => {
+    const el = $(sel), lb = $(lab);
+    let L = null, born = 0;
+    if (b >= 4 && b < 8) { L = INTRO[i]; born = 4 + i; }
+    else if (b >= 137) { L = FINAL[i]; born = 137 + i; }
+    lb.style.visibility = "hidden";
+    if (!L || b < born) { el.style.visibility = "hidden"; return; }
+    const s = t - tb(born);
+    const sc = Math.max(0, ease.back(clamp(s / 0.42))) * (1 + 0.05 * kick(t));
+    el.style.visibility = "visible";
+    el.style.left = L.x + "px"; el.style.top = L.y + "px"; el.style.width = el.style.height = L.d + "px";
+    el.style.transform = `scale(${sc.toFixed(4)})`;
+    el.style.transformOrigin = "50% 100%";
+    if (b >= 137) {
+      lb.style.visibility = "visible";
+      lb.style.left = L.x + L.d / 2 + "px";
+      lb.style.opacity = P(t, tb(born + 0.5), tb(born + 1)).toFixed(3);
+    }
+  });
+}
+
+// beats where the kick drum plays (matches tools/music.py)
+const kickOn = (b) => (b >= 16 && b < 124 && !(b >= 32 && b < 36)) || (b >= 136 && b < 152);
+function kick(t) {
+  const b = Math.floor(t / BEAT);
+  if (!kickOn(b)) return 0;
+  return Math.exp(-(t - b * BEAT) / 0.09);
+}
+
+// ---------- per-scene extras ----------
+function renderExtras(t) {
+  const b = t / BEAT;
+  // title dot cycles through the family colours on every beat
+  $("#tdot").style.background = ["var(--opus)", "var(--sonnet)", "var(--haiku)"][Math.floor(b) % 3];
+  // benchmark groups: rise, then bars grow and values count up
+  for (const g of GROUPS) {
+    const s = t - g.a;
+    g.el.style.visibility = s < 0 ? "hidden" : "visible";
+    g.el.style.transform = `translateY(${((1 - ease.outQ(clamp(s / 0.6))) * 60).toFixed(2)}px)`;
+    g.el.style.opacity = clamp(s / 0.2).toFixed(3);
+    g.bars.forEach((bar, i) => {
+      const p = ease.out(clamp((s - 0.25 - i * 0.12) / 0.9));
+      bar.style.transform = `scaleX(${p.toFixed(4)})`;
+      const v = parseFloat(bar.parentElement.dataset.v);
+      g.vals[i].textContent = (v * p).toFixed(1) + "%";
+      g.vals[i].style.left = (16 + v * 4.6 * p).toFixed(1) + "px";
+    });
+  }
+  // race lanes
+  for (const r of RACES) r.el.style.transform = `scaleX(${clamp((t - r.a) / r.dur).toFixed(4)})`;
+  // haiku loading bar: creeps to ~72 % and shimmers
+  const lp = 0.72 * ease.out(clamp((t - tb(127.5)) / 2.6)) + 0.012 * Math.sin(t * 5);
+  $("#load-fill").style.transform = `scaleX(${clamp(lp).toFixed(4)})`;
+}
+
+// ---------- HUD ----------
+const SECTIONS = [[24, "   ·   阵容 LINEUP"], [36, "   ·   01  OPUS 5.5"], [88, "   ·   02  SONNET 5.5"], [124, "   ·   03  HAIKU 5.5"], [136, ""]];
+function fgAt(b) {
+  if (b >= 8 && b < 16) return ["var(--ink)", "var(--white)", "var(--ink)", "var(--paper)"][Math.floor((b - 8) / 2)];
+  if (b >= 88 && b < 124) return "var(--white)";
+  return "var(--ink)";
+}
+function renderHUD(t) {
+  const b = t / BEAT, bi = Math.floor(b);
+  $("#stage").style.setProperty("--fg", fgAt(b));
+  let sec = "";
+  for (const [s, label] of SECTIONS) if (b >= s) sec = label;
+  $("#hud-sec").textContent = sec;
+  $$("#hud-beats i").forEach((i, k) => i.classList.toggle("on", bi % 4 === k));
+  $("#hud-fill").style.width = ((W - 540) * clamp(t / DURATION)).toFixed(1) + "px";
+  $("#hud-bar").textContent = `BAR ${String(Math.min(40, Math.floor(b / 4) + 1)).padStart(2, "0")} · 128 BPM`;
+  const hudO = Math.min(P(t, tb(1), tb(2.5)), 1 - P(t, tb(146), tb(148)));
+  $("#hud").style.opacity = hudO.toFixed(3);
+  $("#fade").style.opacity = P(t, tb(157), DURATION, ease.inOut).toFixed(4);
+}
+
+function seek(t) {
+  t = clamp(t, 0, DURATION - 1e-6);
+  for (const s of SCENES) s.el.style.display = t >= s.a && t < s.b ? "block" : "none";
+  renderWorlds(t);
+  for (const f of FX) applyFX(f, t);
+  renderFamily(t);
+  renderExtras(t);
+  renderHUD(t);
+}
+window.seek = seek;
+window.DURATION = DURATION;
+
+// ---------- browser viewer (not used when rendering) ----------
+const params = new URLSearchParams(location.search);
+window.fontsReady = document.fonts.ready.then(() => seek(Number(params.get("t") || 0)));
+if (!params.has("render")) {
+  document.body.classList.add("viewer");
+  const fit = () => {
+    const s = Math.min(innerWidth / W, innerHeight / H);
+    const st = $("#stage");
+    st.style.transform = `scale(${s})`;
+    st.style.left = (innerWidth - W * s) / 2 + "px"; st.style.top = (innerHeight - H * s) / 2 + "px";
+  };
+  addEventListener("resize", fit); fit();
+  const audio = new Audio("music.m4a");
+  let t0 = null;
+  const loop = (now) => {
+    if (t0 === null) return;
+    const t = audio.readyState >= 2 && !audio.paused ? audio.currentTime : (now - t0) / 1000;
+    seek(t);
+    if (t < DURATION) requestAnimationFrame(loop); else { document.body.classList.remove("playing"); t0 = null; }
+  };
+  $("#play").addEventListener("click", () => {
+    document.body.classList.add("playing");
+    audio.currentTime = 0; audio.play().catch(() => {});
+    t0 = performance.now(); requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>
