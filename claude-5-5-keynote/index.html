@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude 5.5 Keynote</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  :root {
+    --paper: #f5f5f2;
+    --ink: #0e0e10;
+    --grey: #8b8b87;
+    --grey2: #a3a39e;
+    --bar1: #d4d4cf;
+    --bar2: #e2e2dd;
+    --opus: #ff5a1f;
+    --sonnet: #2f5bff;
+    --haiku: #cdf24f;
+    --sans: "Geist", "Noto Sans SC", sans-serif;
+    --mono: "Geist Mono", "Noto Sans SC", monospace;
+  }
+  html, body { margin: 0; height: 100%; background: var(--paper); overflow: hidden; }
+  #stage {
+    position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; transform-origin: 0 0;
+    background: var(--paper); color: var(--ink); font-family: var(--sans);
+    -webkit-font-smoothing: antialiased; font-feature-settings: "tnum" 1;
+  }
+  #stage * { box-sizing: border-box; }
+  .page, .layer { position: absolute; inset: 0; }
+  .dot { position: absolute; border-radius: 50%; }
+  .abs { position: absolute; }
+
+  /* Masked lines: text rises out of (or leaves through) the line's own edge. Nothing in this film fades. */
+  .m { display: block; overflow: hidden; padding-bottom: .1em; margin-bottom: -.1em; }
+  .m > span { display: block; }
+
+  .label { position: absolute; left: 160px; top: 136px; display: flex; align-items: center; gap: 16px;
+           font: 600 30px/1 var(--sans); letter-spacing: -.01em; white-space: nowrap; }
+  .label i { width: 22px; height: 22px; border-radius: 50%; display: block; }
+  .label span { color: var(--grey); font-weight: 500; }
+
+  .hl { position: absolute; left: 160px; font: 700 112px/1.1 var(--sans); letter-spacing: -.03em; white-space: nowrap; }
+  .g { color: var(--grey2); }
+  .en { position: absolute; left: 160px; font: 500 30px/1.45 var(--sans); color: var(--grey); letter-spacing: -.005em; white-space: nowrap; }
+  .foot { position: absolute; left: 160px; top: 988px; font: 500 20px/1 var(--mono); color: var(--grey2); white-space: nowrap; }
+  .cell { position: absolute; height: 64px; display: flex; align-items: center; white-space: nowrap; }
+  .name { font: 600 32px/1 var(--sans); letter-spacing: -.015em; }
+  .val { font: 700 44px/1 var(--sans); letter-spacing: -.03em; }
+  .dim { color: var(--grey); }
+  .val.dim { font-size: 36px; font-weight: 600; }
+  .center { position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap; }
+  .center .m { display: inline-block; vertical-align: top; }
+
+  #play { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(14,14,16,.5);
+          color: #f5f5f2; font: 600 22px "Geist", sans-serif; letter-spacing: .08em; cursor: pointer; z-index: 5; }
+  body.viewer #play { display: flex; }
+  body.viewer.playing #play { display: none; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="play">▶&nbsp;&nbsp;播放 · PLAY</div>
+<script>
+// Every frame is a pure function of time: seek(t) rebuilds the stage from scratch.
+// Times below are in beats (120 BPM, 1 beat = 0.5 s, 1 bar = 4 beats). tools/music.py uses the same beat numbers.
+const W = 1920, H = 1080;
+const BPM = 120, BEAT = 60 / BPM, BEATS = 80, DURATION = BEATS * BEAT; // 20 bars, 40 s
+const stage = document.getElementById("stage");
+const C = Object.fromEntries(["paper", "ink", "grey", "grey2", "bar1", "bar2", "opus", "sonnet", "haiku"]
+  .map((k) => [k, getComputedStyle(document.documentElement).getPropertyValue("--" + k).trim()]));
+const HAIKU_ON_PAPER = "#a9c92a"; // the lime is too pale on warm white
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (p, a, b) => clamp((p - a) / (b - a));
+const io3 = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const in3 = (t) => t * t * t;
+const out3 = (t) => 1 - Math.pow(1 - t, 3);
+const outExpo = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+const inBack = (t) => 2.7 * t * t * t - 1.7 * t * t;
+// Closed-form spring (about 12% overshoot), so any frame can be computed directly.
+const spring = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.exp(-6.5 * t) * Math.cos(9.5 * t));
+const lerp = (a, b, t) => a + (b - a) * t;
+const mix = (c1, c2, t) => {
+  const h = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const a = h(c1), b = h(c2);
+  return "rgb(" + a.map((v, i) => Math.round(lerp(v, b[i], t))).join(",") + ")";
+};
+const far = (x, y) => Math.max(...[[0, 0], [W, 0], [0, H], [W, H]].map(([a, b]) => Math.hypot(a - x, b - y))) + 4;
+
+// translateY (% of the line) for a masked line that rises in at beat `a` and leaves upward at beat `z`.
+const ty = (b, a, z = 1e9, dIn = 1.5, dOut = 0.75) =>
+  b < z ? 105 * (1 - outExpo(seg(b, a, a + dIn))) : -105 * in3(seg(b, z, z + dOut));
+const line = (text, y, cls = "") =>
+  Math.abs(y) >= 104.9 ? "" : `<span class="m ${cls}"><span style="transform:translateY(${y.toFixed(2)}%)">${text}</span></span>`;
+const dot = (cx, cy, d, color) => d <= 0.05 ? "" :
+  `<i class="dot" style="left:${(cx - d / 2).toFixed(2)}px;top:${(cy - d / 2).toFixed(2)}px;width:${d.toFixed(2)}px;height:${d.toFixed(2)}px;background:${color}"></i>`;
+const ring = (cx, cy, d, color, w) => d <= 0.05 ? "" :
+  `<i class="dot" style="left:${(cx - d / 2).toFixed(2)}px;top:${(cy - d / 2).toFixed(2)}px;width:${d.toFixed(2)}px;height:${d.toFixed(2)}px;box-shadow:inset 0 0 0 ${Math.min(w, d / 2).toFixed(2)}px ${color}"></i>`;
+const rect = (x, y, w, h, r, color) =>
+  `<i class="abs" style="left:${x.toFixed(2)}px;top:${y.toFixed(2)}px;width:${w.toFixed(2)}px;height:${h.toFixed(2)}px;border-radius:${r.toFixed(2)}px;background:${color}"></i>`;
+const label = (color, name, date) => `<div class="label"><i style="background:${color}"></i>${name}<span>${date}</span></div>`;
+
+// "Claude 5.5" is laid out once on a hidden line; each piece is then placed absolutely so it can rise on its own mask
+// and the big dot can land exactly in the decimal slot.
+function measureTitle(size, cy) {
+  const m = document.createElement("div");
+  m.innerHTML = `<div style="position:absolute;visibility:hidden;white-space:nowrap;font:700 ${size}px/1 var(--sans);letter-spacing:-.05em">` +
+    `<span id="m1">Claude 5</span><span id="ms" style="display:inline-block;width:.21em"></span><span id="m2">5</span>` +
+    `<span id="mb" style="display:inline-block;width:0;height:0"></span></div>`;
+  stage.appendChild(m);
+  const box = m.firstChild;
+  box.style.left = (W - box.getBoundingClientRect().width / stageScale()) / 2 + "px";
+  box.style.top = cy - size / 2 + "px";
+  const s = stage.getBoundingClientRect(), k = stageScale();
+  const r = (id) => { const q = m.querySelector("#" + id).getBoundingClientRect(); return { x: (q.left - s.left) / k, y: (q.top - s.top) / k, w: q.width / k, h: q.height / k, bottom: (q.bottom - s.top) / k }; };
+  const out = { size, a: r("m1"), slot: r("ms"), b: r("m2") };
+  const base = r("mb").bottom;
+  m.remove();
+  out.d = Math.round(size * 0.155);
+  out.cx = out.slot.x + out.slot.w / 2;
+  out.cy = base - out.d / 2;
+  return out;
+}
+const stageScale = () => stage.getBoundingClientRect().width / W;
+const titlePiece = (r, text, y, size) => Math.abs(y) >= 104.9 ? "" :
+  `<div style="position:absolute;overflow:hidden;left:${r.x}px;top:${r.y}px;height:${r.h}px;font:700 ${size}px/${r.h}px var(--sans);letter-spacing:-.05em;white-space:nowrap">` +
+  `<span style="display:block;transform:translateY(${y.toFixed(2)}%)">${text}</span></div>`;
+
+// The three family dots (big / medium / small) share one row position in the hook and on the end card.
+const ROW = (() => {
+  const ds = [132, 92, 56], gap = 44;
+  let x = W / 2 - (ds.reduce((a, b) => a + b) + gap * 2) / 2;
+  return ds.map((d) => { const c = { cx: x + d / 2, d }; x += d + gap; return c; });
+})();
+const HOOK_Y = 452, END_Y = 250;
+const LABEL_DOT = [171, 151];
+const PILL = { x: 160, y: 560, w: 1060, h: 116, r: 58 };
+let TB, TE; // measured title layouts (opening, end card)
+
+/* ================================================================ scenes */
+
+// Bars 1–4: three dots → "Claude 5.5". The big dot travels into the decimal slot and turns orange.
+function sOpen(b) {
+  if (b >= 16) return "";
+  const p = seg(b, 8, 13); // transition A
+  let h = "";
+  ROW.forEach((c, i) => {
+    let s = spring(seg(b, i, i + 1.4));
+    if (i === 0) {
+      const t = io3(seg(p, 0.15, 0.62));
+      h += dot(lerp(c.cx, TB.cx, t), lerp(HOOK_Y, TB.cy, t), lerp(c.d * s, TB.d, t), mix(C.ink, C.opus, seg(p, 0.45, 0.65)));
+    } else {
+      s *= Math.max(0, 1 - inBack(seg(p, 0.05 + (i - 1) * 0.06, 0.3 + (i - 1) * 0.06)));
+      h += dot(c.cx, HOOK_Y, c.d * s, C.ink);
+    }
+  });
+  h += `<div class="center" style="top:590px;font:700 84px/1.1 var(--sans);letter-spacing:-.01em">${line("一个家族，三种尺寸", ty(b, 3, 8, 1.5, 1.2))}</div>`;
+  h += `<div class="center" style="top:710px;font:500 32px/1.3 var(--sans);color:var(--grey)">${line("One family, three sizes", ty(b, 3.5, 8.15, 1.5, 1.2))}</div>`;
+  h += titlePiece(TB.a, "Claude 5", ty(b, 10.25, 1e9, 1.65), TB.size);
+  h += titlePiece(TB.b, "5", ty(b, 10.9, 1e9, 1.5), TB.size);
+  const sep = `<span style="color:var(--bar1)">&nbsp;·&nbsp;</span>`;
+  h += `<div class="center" style="top:720px;font:500 34px/1.3 var(--sans);color:var(--grey);letter-spacing:-.005em">` +
+    line(`Opus 5.5 ${sep} Sonnet 5.5 ${sep} Haiku 5.5`, ty(b, 11.6, 1e9, 1.4)) + `</div>`;
+  return h;
+}
+
+// Transition B: the decimal point floods the frame on the drop, then contracts into the Opus label dot.
+function fOrange(b) {
+  if (b < 14 || b >= 17.5) return "";
+  if (b < 16) {
+    const R = lerp(TB.d / 2, far(TB.cx, TB.cy), in3(seg(b, 14, 16)));
+    return dot(TB.cx, TB.cy, R * 2, C.opus);
+  }
+  const R = lerp(far(...LABEL_DOT), 11, out3(seg(b, 16, 17.5)));
+  return dot(LABEL_DOT[0], LABEL_DOT[1], R * 2, C.opus);
+}
+
+// One benchmark row, drawn absolutely so a bar can later turn into something else.
+// grow: 0..1 bar length; nameY / valY: mask offsets. The value counts up with the bar but never back down.
+function row(top, name, v, scale, color, grow, nameY, valY, dim, settled = false) {
+  const w = v * scale * grow;
+  let h = `<div class="cell name ${dim ? "dim" : ""}" style="left:160px;top:${top}px">${line(name, nameY)}</div>`;
+  if (w > 0.5) h += rect(440, top, w, 64, Math.min(14, w / 2), color);
+  h += `<div class="cell val ${dim ? "dim" : ""}" style="left:${440 + w + 28}px;top:${top}px">${line((v * (settled ? 1 : grow)).toFixed(1) + "%", valY)}</div>`;
+  return h;
+}
+const draw = (b, a, z, dIn = 2, dOut = 0.75) => (b < z ? out3(seg(b, a, a + dIn)) : 1 - in3(seg(b, z, z + dOut)));
+
+// Bars 5–10: Opus 5.5 (headline → chart → price), pushed out to the left at beat 39.5.
+function sOpus(b) {
+  if (b < 16 || b >= 41) return "";
+  const ox = -W * io3(seg(b, 39.5, 41));
+  let h = `<div class="page" style="transform:translateX(${ox.toFixed(1)}px)">`;
+  h += label(C.opus, "Opus 5.5", "2026.09.22");
+  // headline
+  h += `<div class="hl" style="top:330px">${line("Fable 5.1 级的表现", ty(b, 16.6, 23))}${line("运行成本低 40%", ty(b, 17, 23.25), "g")}</div>`;
+  h += `<div class="en" style="top:640px">${line("Fable 5.1-level performance on most work,", ty(b, 17.6, 23.5))}${line("at 40% lower running cost than Opus 5", ty(b, 17.75, 23.6))}</div>`;
+  // chart
+  if (b >= 23.5) {
+    h += `<div class="abs" style="left:160px;top:286px;font:700 64px/1 var(--sans);letter-spacing:-.03em;white-space:nowrap">${line("Terminal-Bench 4.0", ty(b, 24, 31.25))}</div>`;
+    h += `<div class="abs" style="left:160px;top:372px;font:500 30px/1 var(--sans);color:var(--grey);white-space:nowrap">${line("智能体编程 · Agentic coding", ty(b, 24.5, 31.25))}</div>`;
+    [["Opus 5.5", 66.4, C.opus], ["Fable 5.1", 55.8, C.bar1], ["Opus 5", 52.3, C.bar2]].forEach(([n, v, c], i) => {
+      const a = 25 + i * 0.5;
+      h += row(500 + i * 120, n, v, 15, c, draw(b, a, 31 + (2 - i) * 0.15), ty(b, a - 0.25, 31), ty(b, a, 31), i > 0, b >= 31);
+    });
+  }
+  // price
+  if (b >= 32) {
+    const strike = out3(seg(b, 33.5, 34.25));
+    h += `<div class="center" style="top:300px;font:600 72px/1 var(--sans);color:var(--grey2);letter-spacing:-.03em">` +
+      `<span style="position:relative;display:inline-block">${line("$5 / $25", ty(b, 32.5))}` +
+      (strike > 0 ? `<i style="position:absolute;left:-12px;top:50%;height:6px;margin-top:-3px;border-radius:3px;background:var(--opus);width:calc((100% + 24px) * ${strike.toFixed(4)})"></i>` : "") +
+      `</span></div>`;
+    h += `<div class="center" style="top:410px;font:700 248px/1 var(--sans);letter-spacing:-.055em">${line("$4 / $20", ty(b, 34, 1e9, 1.6))}</div>`;
+    h += `<div class="center" style="top:712px;font:500 34px/1.3 var(--sans);color:var(--grey)">${line("每百万 tokens · 输入 / 输出", ty(b, 34.75))}</div>`;
+    h += `<div class="center" style="top:762px;font:500 26px/1.3 var(--sans);color:var(--grey2)">${line("per million tokens, input / output", ty(b, 35.25))}</div>`;
+  }
+  h += `<div class="foot">${line("对比 Opus 5 · max effort · 来源 anthropic.com/claude-opus-5-5", ty(b, 18))}</div>`;
+  return h + `</div>`;
+}
+
+// Bars 11–14: Sonnet 5.5, pushed in from the right. Its blue bar becomes the black prompt bar,
+// and the prompt bar floods the frame to start the breakdown.
+function sSonnet(b) {
+  if (b < 39.5 || b >= 56) return "";
+  const ox = W * (1 - io3(seg(b, 39.5, 41)));
+  let h = `<div class="page" style="transform:translateX(${ox.toFixed(1)}px)">`;
+  h += label(C.sonnet, "Sonnet 5.5", "2026.09.28");
+  h += `<div class="hl" style="top:250px;font-size:104px">${line("编程跑分超过 Opus 5.5", ty(b, -9, 46.5))}${line("价格只要一半", ty(b, -9, 46.75), "g")}</div>`;
+  h += `<div class="abs" style="left:160px;top:560px;font:500 28px/1 var(--sans);color:var(--grey);white-space:nowrap">${line("Terminal-Bench 4.0", ty(b, -9, 46.5))}</div>`;
+  // head-to-head; the Sonnet bar is morphed separately from beat 47
+  const g0 = out3(seg(b, 41, 43));
+  if (b < 47) h += row(620, "Sonnet 5.5", 70.6, 14, C.sonnet, g0, ty(b, -9, 46.5), ty(b, 41, 46.5), false);
+  else h += `<div class="cell name" style="left:160px;top:620px">${line("Sonnet 5.5", ty(b, -9, 46.5))}</div>`;
+  h += row(730, "Opus 5.5", 66.4, 14, C.bar1, draw(b, 41.5, 46.5), ty(b, -9, 46.5), ty(b, 41.5, 46.5), true, b >= 46.5);
+  h += `<div class="foot">${line("$2 / $10 vs $4 / $20 每百万 tokens · 来源 anthropic.com/claude-sonnet-5-5", ty(b, -9, 46.5))}</div>`;
+  h += `<div class="foot">${line("来源 anthropic.com/claude-sonnet-5-5", ty(b, 48))}</div>`;
+
+  // Pokémon
+  h += `<div class="hl" style="top:250px;font-size:104px">${line("只看截图", ty(b, 48))}${line("通关《宝可梦 红》", ty(b, 48.4), "g")}</div>`;
+  for (let i = 0; i < 8; i++) h += dot(182 + i * 64, 772, 44 * spring(seg(b, 49.5 + i * 0.5, 50.9 + i * 0.5)), C.sonnet);
+  h += `<div class="abs" style="left:700px;top:756px;font:600 32px/1 var(--sans);letter-spacing:-.01em;white-space:nowrap">` +
+    line(`8 / 8 <span style="color:var(--grey);font-weight:500">道馆徽章 · gym badges</span>`, ty(b, 53.5)) + `</div>`;
+  h += `<div class="en" style="top:850px">${line("The first Sonnet model to beat Pokémon Red working only from screenshots", ty(b, 54))}</div>`;
+
+  // bar → prompt bar → full-frame black
+  if (b >= 47) {
+    const m = io3(seg(b, 47, 48.5)), f = in3(seg(b, 55, 56));
+    const bar = { x: 440, y: 620, w: 70.6 * 14 * g0, h: 64, r: 14 };
+    const full = { x: -60, y: -60, w: W + 120, h: H + 120, r: 0 };
+    const k = (key) => lerp(lerp(bar[key], PILL[key], m), full[key], f);
+    h += rect(k("x"), k("y"), k("w"), k("h"), k("r"), mix(C.sonnet, C.ink, m));
+    // prompt text and send button, both gone before the flood
+    h += `<div class="abs" style="left:212px;top:${PILL.y}px;height:${PILL.h}px;display:flex;align-items:center;font:500 34px/1 var(--sans);color:#f5f5f2;letter-spacing:-.01em;white-space:nowrap">` +
+      line("Play Pokémon Red, screenshots only", ty(b, 49, 54.75, 1.5, 0.5)) + `</div>`;
+    const s = spring(seg(b, 48.5, 49.9)) * Math.max(0, 1 - inBack(seg(b, 54.75, 55.25)));
+    if (s > 0.001) {
+      const cx = PILL.x + PILL.w - 18 - 40, cy = PILL.y + PILL.h / 2;
+      h += `<div class="abs" style="left:${cx - 40}px;top:${cy - 40}px;width:80px;height:80px;border-radius:50%;background:var(--sonnet);` +
+        `display:flex;align-items:center;justify-content:center;transform:scale(${s.toFixed(4)})">` +
+        `<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></div>`;
+    }
+  }
+  return h + `</div>`;
+}
+
+// Bars 15–16: breakdown on black. At beat 62.5 the black contracts toward the Haiku spot on the end card.
+const HAIKU_END = [ROW[2].cx, END_Y];
+function sHaiku(b) {
+  if (b < 56 || b >= 64.25) return "";
+  const c = io3(seg(b, 62.5, 63.75));
+  const R = b < 63.75 ? lerp(far(...HAIKU_END), 28, c) : lerp(28, 0, in3(seg(b, 63.75, 64.25)));
+  let h = `<div class="layer" style="background:var(--ink);clip-path:circle(${R.toFixed(2)}px at ${HAIKU_END[0]}px ${HAIKU_END[1]}px)">`;
+  h += `<div class="center" style="top:420px;font:700 200px/1 var(--sans);letter-spacing:-.05em;color:var(--paper)">${line("Haiku 5.5", ty(b, 57, 1e9, 1.6))}</div>`;
+  h += `<div class="center" style="top:680px;font:500 38px/1.3 var(--sans);color:#a3a39e">${line("为高并发、低成本而生 · 未来几周内", ty(b, 58))}</div>`;
+  h += `<div class="center" style="top:740px;font:500 28px/1.3 var(--sans);color:#6c6c69">${line("Built for high-volume, cost-sensitive work · in the coming weeks", ty(b, 58.5))}</div>`;
+  return h + `</div>`;
+}
+
+// The Haiku ring survives the contraction and becomes the third dot of the end card.
+function haikuRing(b) {
+  if (b < 56.5) return "";
+  const s = spring(seg(b, 56.5, 57.9));
+  const c = io3(seg(b, 62.5, 63.75));
+  return ring(lerp(960, HAIKU_END[0], c), lerp(330, HAIKU_END[1], c), lerp(64, 56, c) * s, mix(C.haiku, HAIKU_ON_PAPER, c), 6);
+}
+
+// Bars 17–20: end card.
+function sEnd(b) {
+  if (b < 62.5) return "";
+  let h = dot(ROW[0].cx, END_Y, ROW[0].d * spring(seg(b, 64, 65.4)), C.opus);
+  h += dot(ROW[1].cx, END_Y, ROW[1].d * spring(seg(b, 65, 66.4)), C.sonnet);
+  h += titlePiece(TE.a, "Claude 5", ty(b, 66, 1e9, 1.6), TE.size) + titlePiece(TE.b, "5", ty(b, 66.3), TE.size);
+  h += dot(TE.cx, TE.cy, TE.d * spring(seg(b, 66.8, 68)), C.ink);
+  h += `<div class="center" style="top:640px;font:600 48px/1.2 var(--sans);letter-spacing:-.01em;color:var(--grey)">${line("挑一个尺寸，开始构建", ty(b, 67.5))}</div>`;
+  h += `<div class="center" style="top:740px;font:500 26px/1 var(--mono);color:var(--grey);white-space:pre">` +
+    line(`claude-opus-5-5     claude-sonnet-5-5     <span style="font-family:var(--sans)">Haiku 5.5 即将推出</span>`, ty(b, 68.5)) + `</div>`;
+  h += `<div class="center" style="top:957px;font:500 19px/1.6 var(--sans);color:var(--grey2)">${line("非官方致敬短片，与 Anthropic 无关联 · 数据来自 anthropic.com（2026 年 9 月）", ty(b, 69.5))}</div>`;
+  h += `<div class="center" style="top:987px;font:500 19px/1.6 var(--sans);color:var(--grey2)">${line("Unofficial fan tribute, not affiliated with Anthropic", ty(b, 69.75))}</div>`;
+  return h;
+}
+
+function seek(t) {
+  const b = clamp(t, 0, DURATION - 1e-6) / BEAT;
+  stage.innerHTML = sOpen(b) + sOpus(b) + sSonnet(b) + fOrange(b) + sEnd(b) + sHaiku(b) + haikuRing(b);
+}
+window.seek = seek;
+window.DURATION = DURATION;
+
+// ---------- browser viewer (not used when rendering) ----------
+const params = new URLSearchParams(location.search);
+// Nothing is on stage yet, so document.fonts.ready alone would resolve before Geist is fetched and the title
+// would be measured with a fallback font. Load the faces explicitly first.
+window.fontsReady = Promise.all([
+  document.fonts.load('700 100px "Geist"', "Claude 5.5"),
+  document.fonts.load('500 100px "Geist"', "Opus"),
+  document.fonts.load('700 100px "Noto Sans SC"', "一"),
+  document.fonts.load('500 100px "Noto Sans SC"', "一"),
+  document.fonts.load('500 20px "Geist Mono"', "claude"),
+]).then(() => document.fonts.ready).then(() => {
+  TB = measureTitle(272, 500);
+  TE = measureTitle(176, 488);
+  seek(Number(params.get("t") || 0));
+});
+if (!params.has("render")) {
+  document.body.classList.add("viewer");
+  const fit = () => {
+    const s = Math.min(innerWidth / W, innerHeight / H);
+    stage.style.transform = `scale(${s})`;
+    stage.style.left = (innerWidth - W * s) / 2 + "px";
+    stage.style.top = (innerHeight - H * s) / 2 + "px";
+  };
+  addEventListener("resize", fit); fit();
+  const audio = new Audio("music.m4a");
+  let t0 = null;
+  const loop = (now) => {
+    if (t0 === null) return;
+    const t = audio.readyState >= 2 && !audio.paused ? audio.currentTime : (now - t0) / 1000;
+    seek(t);
+    if (t < DURATION) requestAnimationFrame(loop); else { document.body.classList.remove("playing"); t0 = null; }
+  };
+  document.getElementById("play").addEventListener("click", () => {
+    document.body.classList.add("playing");
+    audio.currentTime = 0; audio.play().catch(() => {});
+    t0 = performance.now(); requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>
