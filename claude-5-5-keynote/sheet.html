@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Claude 5.5 Keynote Storyboard</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  :root {
+    --paper: #f5f5f2; --ink: #0e0e10; --grey: #8b8b87; --grey2: #a3a39e; --line: #dcdcd7;
+    --opus: #ff5a1f; --sonnet: #2f5bff; --haiku: #cdf24f;
+    --sans: "Geist", "Noto Sans SC", sans-serif; --mono: "Geist Mono", "Noto Sans SC", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; width: 1920px; background: var(--paper); color: var(--ink); font-family: var(--sans);
+         -webkit-font-smoothing: antialiased; padding: 72px 80px 80px; }
+  h1 { font: 700 56px/1.1 var(--sans); letter-spacing: -.03em; margin: 0; }
+  .sub { font: 500 24px/1.5 var(--sans); color: var(--grey); margin: 14px 0 0; }
+  h2 { font: 600 26px/1 var(--sans); letter-spacing: -.01em; margin: 64px 0 22px; }
+  h2 span { color: var(--grey); font-weight: 500; }
+
+  /* Beat map: 40 s, 20 bars of 2 s. */
+  .map { position: relative; height: 150px; }
+  .map .track { position: absolute; left: 0; right: 0; top: 34px; height: 44px; display: flex; border-radius: 10px; overflow: hidden; }
+  .map .track div { height: 100%; display: flex; align-items: center; padding-left: 14px; font: 600 18px/1 var(--sans); white-space: nowrap; }
+  .map .tick { position: absolute; top: 86px; font: 500 15px/1 var(--mono); color: var(--grey2); transform: translateX(-50%); }
+  .map .bar { position: absolute; top: 80px; width: 1px; height: 6px; background: var(--grey2); }
+  .map .kf { position: absolute; top: 0; transform: translateX(-50%); font: 600 15px/1 var(--mono); }
+  .map .kf::after { content: ""; position: absolute; left: 50%; top: 21px; width: 0; height: 0; margin-left: -7px;
+                    border: 7px solid transparent; border-top: 9px solid var(--ink); border-bottom: 0; }
+  .map .cue { position: absolute; top: 116px; font: 500 16px/1 var(--sans); color: var(--ink); }
+  .map .cue::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ink); margin-right: 8px; vertical-align: 2px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 44px 40px; }
+  .card img { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px var(--line); }
+  .meta { margin-top: 14px; font: 500 16px/1 var(--mono); color: var(--grey); }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .desc { margin-top: 10px; font: 500 20px/1.5 var(--sans); }
+
+  .strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .strip img { display: block; width: 100%; border-radius: 8px; box-shadow: 0 0 0 1px var(--line); }
+  .strip .meta { margin-top: 10px; font-size: 14px; }
+  .note { font: 500 20px/1.5 var(--sans); color: var(--grey); margin: 14px 0 0; }
+  .foot { margin-top: 56px; font: 500 16px/1.6 var(--sans); color: var(--grey2); }
+</style>
+</head>
+<body>
+  <h1>Claude 5.5 家族 · Keynote 版关键帧 v0</h1>
+  <p class="sub">40 秒 · 120 BPM（1 拍 0.5 秒，1 小节 2 秒）· 16:9 · 一镜到底，不切不淡出 · 暖白底、黑色 UI、一个镜头只有一个强调色</p>
+
+  <h2>Beat Map <span>· 20 小节</span></h2>
+  <div class="map" id="map"></div>
+
+  <h2>关键帧 <span>· 每张都是 frames.html 直接渲染的 1920×1080 画面，不是示意图</span></h2>
+  <div class="grid" id="grid"></div>
+
+  <h2>转场 A <span>· 0:03–0:06 · 三个点变成 “5.5” 的小数点</span></h2>
+  <div class="strip" id="sa"></div>
+  <p class="note">小点和中点弹簧收回，大点一边缩小一边滑进小数点的位置，落地时变成橙色；“Claude 5” 和后面的 “5” 从遮罩线下升起来。整段没有一帧是淡入淡出。</p>
+
+  <h2>转场 B <span>· 0:07.5–0:08.5 · 小数点涨满全屏，再收缩成 Opus 的标签点</span></h2>
+  <div class="strip" id="sb"></div>
+  <p class="note">这是 zero 说的 “黑色形状铺满画面、再收缩成下一场”，这里用的是本章的强调色。Drop 落在全屏橙色那一拍上；收缩时，下一场已经在底下了。</p>
+
+  <p class="foot">非官方致敬作品，与 Anthropic 无关联 · 片中数字全部来自 anthropic.com 的发布页（2026 年 9 月）</p>
+
+<script>
+const KF = [
+  ["kf1-hook", "0:01.5", "小节 1", "三个点踩着前三拍弹出，一句话交代家族关系"],
+  ["kf2-title", "0:06", "小节 3–4", "大点缩成 “5.5” 的小数点并变橙，“Claude 5” 从遮罩线升起"],
+  ["kf3-opus", "0:09.5", "小节 5 · Drop", "Opus 章：结论黑、补充灰，Keynote 式双色标题"],
+  ["kf4-chart", "0:14", "小节 7–8", "柱子按拍子依次画出来；只有主角上色，其余全灰"],
+  ["kf5-price", "0:18", "小节 9–10", "旧价被一条橙线划掉，新价从下面推上来"],
+  ["kf6-sonnet", "0:22.5", "小节 11–12", "整页左推进入 Sonnet：跑分反超，价格减半"],
+  ["kf7-pokemon", "0:26.5", "小节 13–14", "黑色输入框是真的 UI 元素，8 枚徽章按八分音符逐个弹出"],
+  ["kf8-haiku", "0:30", "小节 15–16 · Breakdown", "黑色铺满，音乐收住；Haiku 用空心圈表示“还没到”"],
+  ["kf9-end", "0:36", "小节 17–20", "黑色收缩回三个点，落版停留最后 15%"],
+];
+document.getElementById("grid").innerHTML = KF.map(([f, t, b, d], i) =>
+  `<div class="card"><img src="storyboard/${f}.png"><div class="meta"><b>KF${i + 1}</b> · ${t} · ${b}</div><div class="desc">${d}</div></div>`).join("");
+for (const [id, name] of [["sa", "morphA"], ["sb", "morphB"]])
+  document.getElementById(id).innerHTML = [0, 25, 50, 75, 100].map((p, i) =>
+    `<div><img src="storyboard/${name}-${i + 1}.png"><div class="meta">p = ${p}%</div></div>`).join("");
+
+// Beat map
+const map = document.getElementById("map"), W = 1760, S = 40, X = (t) => (t / S) * W;
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim();
+const chapters = [
+  [0, 4, "Hook", "#e4e4df", "var(--ink)"], [4, 8, "Claude 5.5", "#d2d2cc", "var(--ink)"],
+  [8, 20, "01 Opus 5.5", css("opus"), "#fff"], [20, 28, "02 Sonnet 5.5", css("sonnet"), "#fff"],
+  [28, 32, "03 Haiku", css("ink"), css("haiku")], [32, 40, "落版", "#e4e4df", "var(--ink)"],
+];
+let h = `<div class="track">` + chapters.map(([a, b, n, bg, fg]) => `<div style="width:${X(b - a)}px;background:${bg};color:${fg}">${n}</div>`).join("") + `</div>`;
+for (let s = 0; s <= 40; s += 2) h += `<i class="bar" style="left:${X(s)}px"></i>`;
+for (const s of [0, 8, 16, 20, 28, 32, 40]) h += `<span class="tick" style="left:${X(s)}px">${s}s</span>`;
+[1.5, 6, 9.5, 14, 18, 22.5, 26.5, 30, 36].forEach((t, i) => (h += `<span class="kf" style="left:${X(t)}px">KF${i + 1}</span>`));
+for (const [t, n] of [[0, "前三拍：三个点弹出"], [8, "Drop：橙色铺满"], [20, "整页左推"], [28, "Breakdown"], [32, "副歌 · 落版"]])
+  h += `<span class="cue" style="left:${X(t) + (t ? 16 : 0)}px">${n}</span>`;
+map.innerHTML = h;
+</script>
+</body>
+</html>

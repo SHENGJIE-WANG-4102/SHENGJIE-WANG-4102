@@ -1,0 +1,50 @@
+1
+00:00:06,300 --> 00:00:15,800
+七十多年来，人类一直在追问同一个问题。
+For over seventy years, we have been chasing a single question.
+
+2
+00:00:16,200 --> 00:00:25,700
+算力、数据与算法，一次次把答案推得更近。
+Compute, data and algorithms kept pulling the answer closer.
+
+3
+00:00:26,400 --> 00:00:30,800
+2021 年，一群研究者决定换一种方式去回答它。
+In 2021, a group of researchers set out to answer it differently.
+
+4
+00:00:31,200 --> 00:00:35,700
+他们相信：AI 越强大，就越需要被认真对待。
+They believed that the more powerful AI becomes, the more care it demands.
+
+5
+00:00:36,400 --> 00:00:43,700
+他们把它命名为 Claude。
+They named it Claude.
+
+6
+00:00:44,200 --> 00:00:51,700
+它学会了看懂图片、实时创作，也学会了操作电脑。
+It learned to see, to create — and to use a computer.
+
+7
+00:00:52,200 --> 00:00:59,700
+它学会了先思考、再回答，还学会了写代码。
+It learned to think before it answers — and to write code.
+
+8
+00:01:00,200 --> 00:01:11,600
+从几分钟的对话，到连续数小时的自主工作。
+From minutes of conversation to hours of autonomous work.
+
+9
+00:01:12,400 --> 00:01:23,600
+今天，它在你的浏览器、终端和桌面里，与你一起工作。
+Today it works beside you — in your browser, your terminal, your desktop.
+
+10
+00:01:26,400 --> 00:01:30,000
+也许更重要的是：它能和你一起思考。
+Perhaps what matters more: it thinks with you.
+
